@@ -4,8 +4,15 @@ import datetime
 
 client = bitmex.bitmex(api_key="xz6A_yXiAJgNB9YAZF-jvvOY", api_secret="obXhEbnAPDFV__s_tBMuy0JiHC7jLdbJI_OSWvsnFThmSkVt")
 dir(client.Quote)
-client.OrderBook.OrderBook_getL2(symbol="XBTUSD").result() 
-client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=10, startTime=datetime.datetime(2018, 1, 1)).result()
+#client.OrderBook.OrderBook_getL2(symbol="XBTUSD").result() 
+
+#run a loop to run this every 5 minutes
+candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=10, startTime=datetime.datetime(2018, 1, 1)).result()
+prices=barrettsFunction(candles)
+RSI=calculateRSI(prices)
+if RSI<20:
+    buy position
+###########################################
 
 
 def calculateRSI(prices):
@@ -49,6 +56,6 @@ def calculateRSI(prices):
             RSI.append(100-(100/(1+smoothedRS)))
 
 
-    return([avgGain,avgLoss,changes,RSI])
+    return(RSI[-1])
 	
 calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
