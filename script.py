@@ -7,7 +7,7 @@ dir(client.Quote)
 client.OrderBook.OrderBook_getL2(symbol="XBTUSD").result() 
 client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=10, startTime=datetime.datetime(2018, 1, 1)).result()
 
-#need to pass exactly 15 prices to this function
+
 def calculateInitial(prices):
 	changes=[]
 	avgGain=0
@@ -15,16 +15,41 @@ def calculateInitial(prices):
     for x,price in enumerate(prices):
     	if(x==0):
     		x=1
-    	print(x)
     	changes.append(int(price)-int(prices[x-1]))
-    for change in changes:
+    for x,change in enumerate(changes):
     	if change>0:
     		avgGain+=change
     	else:
     		avgLoss+=-change
-    avgGain=avgGain/14
-    avgLoss=avgLoss/14
-    return([avgGain,avgLoss,prices])
+        if x==14:
+            break
+    avgGainInitial=avgGain/14
+    avgLossInitial=avgLoss/14
+    changes=changes[14:]
+    avgGain=[]
+    avgLoss=[]
+    RSI=[]
+    avgGain[0]=avgGainInitial
+    avgLoss[0]=avgLossInitial
+    for x,change in enumerate(changes):
+        if x==0:
+            continue
+        currentGain=0
+        currentLoss=0
+        if change>0:
+            currentGain=change
+        else:
+            currentLoss=-change
+        avgGain[x]=avgGain[x-1]*13+currentGain/14
+        avgLoss[x]=avgLoss[x-1]*13+currentLoss/14
+        if (avgLoss[x]*13+currentLoss)==0:
+            RSI=100
+        else:
+            smoothedRS=avgGain[x]/avgLoss[x]
+            RSI[x]=100-(100/(1+smoothedRS))
+
+
+    return([avgGain,avgLoss,changes,RSI])
 
 def calculateRSI(avgGain,avgLoss,prices,newPrice):
 	change=newPrice-prices[14]
