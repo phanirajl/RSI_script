@@ -84,11 +84,11 @@ client = bitmex.bitmex(api_key="e-821dISZ8iE6BEwgh652dc3", api_secret="Y5ppArBDc
 dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
-
+listRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
-    candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=100, partial=True, startTime=datetime.datetime.now()).result()
+    candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
     RSICurrent=calculateRSI(prices)
     LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
@@ -97,24 +97,24 @@ def algorithm():
     logger.info(RSICurrent)
     print(RSICurrent)
     roundedRSI=round(RSICurrent)
-    listRSI=[False]*101
+    #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
     #Buying low RSI
-    if (roundedRSI<=20 and listRSI[roundedRSI]==False):
+    if (roundedRSI<=48 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=10, price=price,execInst='ParticipateDoNotInitiate').result()
-        listRSI[roundedRSI]==True
-        logger.info("Buy order placed at :"+str(price))
-        
+        client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
+        listRSI[roundedRSI]=True
+        logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+
     #Shorting high RSI
-    if (roundedRSI>=80 and listRSI[roundedRSI]==False):
+    if (roundedRSI>=52 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-10, price=price,execInst='ParticipateDoNotInitiate').result()
-        listRSI[roundedRSI]==True
-        logger.info("Short order placed at :"+str(price))
-
-    s.enter(120, 1, algorithm)
+        client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        listRSI[roundedRSI]=True
+        logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+    print (listRSI)
+    s.enter(40, 1, algorithm)
 
 s.enter(1, 1, algorithm)
 s.run()
@@ -144,5 +144,46 @@ s.run()
 #   print "Hello, World!"
 
 # printit()
-
+import pandas_datareader.data
 # # continue with the rest of your code
+
+
+# In [119]:     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()^M
+#      ...:     prices=help_collect_close_list(candles[0])^M
+#      ...:     RSICurrent=calculateRSI(prices)
+#      ...:     RSICurrent
+#      ...:
+#      ...:
+#      ...:
+#      ...:
+# Out[119]: 46.07829309296
+
+# In [120]: close=pandas.Series(prices)
+
+# In [121]: window_length = 14^M
+#      ...: # Get the difference in price from previous step^M
+#      ...: delta = close.diff()^M
+#      ...: # Get rid of the first row, which is NaN since it did not have a previous ^M
+#      ...: # row to calculate the differences^M
+#      ...: delta = delta[1:] ^M
+#      ...: ^M
+#      ...: # Make the positive gains (up) and negative gains (down) Series^M
+#      ...: up, down = delta.copy(), delta.copy()^M
+#      ...: up[up < 0] = 0^M
+#      ...: down[down > 0] = 0^M
+#      ...: ^M
+#      ...: # Calculate the EWMA^M
+#      ...: roll_up1 = pandas.stats.moments.ewma(up, window_length)^M
+#      ...: roll_down1 = pandas.stats.moments.ewma(down.abs(), window_length)^M
+#      ...: ^M
+#      ...: # Calculate the RSI based on EWMA^M
+#      ...: RS1 = roll_up1 / roll_down1^M
+#      ...: RSI1 = 100.0 - (100.0 / (1.0 + RS1))^M
+#      ...: ^M
+#      ...: # Calculate the SMA^M
+#      ...: roll_up2 = pandas.rolling_mean(up, window_length)^M
+#      ...: roll_down2 = pandas.rolling_mean(down.abs(), window_length)^M
+#      ...: ^M
+#      ...: # Calculate the RSI based on SMA^M
+#      ...: RS2 = roll_up2 / roll_down2^M
+#      ...: RSI2 = 100.0 - (100.0 / (1.0 + RS2))
