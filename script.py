@@ -80,7 +80,7 @@ def help_collect_close_list(input_data):
     return close_list
 
 
-client = bitmex.bitmex(api_key="e-821dISZ8iE6BEwgh652dc3", api_secret="Y5ppArBDcE8pwlBHdilQOt32ANp6tMkd_U-1Rk8uiG2GB0Nr")
+client = bitmex.bitmex(api_key="", api_secret="")
 dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
