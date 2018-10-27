@@ -2,6 +2,7 @@ import bitmex
 import datetime
 import logging
 import sched, time
+import json
 #import talib #pip install TA-Lib
 
 
@@ -81,10 +82,11 @@ def help_collect_close_list(input_data):
 
 
 client = bitmex.bitmex(api_key="e-821dISZ8iE6BEwgh652dc3", api_secret="Y5ppArBDcE8pwlBHdilQOt32ANp6tMkd_U-1Rk8uiG2GB0Nr")
-dir(client.Quote)
+#dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
 listRSI=[False]*101
+profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
@@ -96,24 +98,49 @@ def algorithm():
     logger=logging.getLogger()
     logger.info(RSICurrent)
     print(RSICurrent)
+    print (prices[-1])
     roundedRSI=round(RSICurrent)
     #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
     #Buying low RSI
-    if (roundedRSI<=48 and listRSI[roundedRSI]==False):
+    if (roundedRSI<=20 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
+        client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate')
         listRSI[roundedRSI]=True
         logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
     #Shorting high RSI
-    if (roundedRSI>=52 and listRSI[roundedRSI]==False):
+    if (roundedRSI>=85 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate')
         listRSI[roundedRSI]=True
         logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
     print (listRSI)
+##################################################TAKING PROFITS BELOW##################################################################
+
+    #Taking profits
+    currency={"symbol": "XBTUSD"}
+    position=client.Position.Position_get(filter= json.dumps(currency)).result()
+    quantity=position[0][0]["currentQty"]
+
+    #selling a long position
+    if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
+        level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+        price=level2Result[0][0]['price']#getting the ask price
+        client.Order.Order_new(symbol='XBTUSD', orderQty=-quantity/10, price=price,execInst='ParticipateDoNotInitiate')
+        profitRSI[roundedRSI]=True
+        logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+
+    #covering a long position
+    if (quantity<0 and roundedRSI<=77 and profitRSI[roundedRSI]==False):
+        level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+        price=level2Result[0][1]['price']#getting the bid price
+        client.Order.Order_new(symbol='XBTUSD', orderQty=quantity/10, price=price,execInst='ParticipateDoNotInitiate')
+        profitRSI[roundedRSI]=True
+        logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+    print (profitRSI)
+
     s.enter(40, 1, algorithm)
 
 s.enter(1, 1, algorithm)
@@ -130,9 +157,9 @@ s.run()
 
 #In [15]: reload(logging)
 
-# In [8]: import logging^M
+# In [8]: import logging
 #    ...: LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
-#    ...: logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')^M
+#    ...: logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
 #    ...: logger=logging.getLogger()
 #    ...: logger.warning('This message should go to the log file')
 #    ...: logger.level
@@ -144,46 +171,45 @@ s.run()
 #   print "Hello, World!"
 
 # printit()
+
+
+
+import pandas
 import pandas_datareader.data
-# # continue with the rest of your code
 
 
-# In [119]:     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()^M
-#      ...:     prices=help_collect_close_list(candles[0])^M
-#      ...:     RSICurrent=calculateRSI(prices)
-#      ...:     RSICurrent
-#      ...:
-#      ...:
-#      ...:
-#      ...:
-# Out[119]: 46.07829309296
 
-# In [120]: close=pandas.Series(prices)
+candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
+prices=help_collect_close_list(candles[0])
+RSICurrent=calculateRSI(prices)
 
-# In [121]: window_length = 14^M
-#      ...: # Get the difference in price from previous step^M
-#      ...: delta = close.diff()^M
-#      ...: # Get rid of the first row, which is NaN since it did not have a previous ^M
-#      ...: # row to calculate the differences^M
-#      ...: delta = delta[1:] ^M
-#      ...: ^M
-#      ...: # Make the positive gains (up) and negative gains (down) Series^M
-#      ...: up, down = delta.copy(), delta.copy()^M
-#      ...: up[up < 0] = 0^M
-#      ...: down[down > 0] = 0^M
-#      ...: ^M
-#      ...: # Calculate the EWMA^M
-#      ...: roll_up1 = pandas.stats.moments.ewma(up, window_length)^M
-#      ...: roll_down1 = pandas.stats.moments.ewma(down.abs(), window_length)^M
-#      ...: ^M
-#      ...: # Calculate the RSI based on EWMA^M
-#      ...: RS1 = roll_up1 / roll_down1^M
-#      ...: RSI1 = 100.0 - (100.0 / (1.0 + RS1))^M
-#      ...: ^M
-#      ...: # Calculate the SMA^M
-#      ...: roll_up2 = pandas.rolling_mean(up, window_length)^M
-#      ...: roll_down2 = pandas.rolling_mean(down.abs(), window_length)^M
-#      ...: ^M
-#      ...: # Calculate the RSI based on SMA^M
-#      ...: RS2 = roll_up2 / roll_down2^M
-#      ...: RSI2 = 100.0 - (100.0 / (1.0 + RS2))
+
+close=pandas.Series(prices)
+
+window_length = 14
+# Get the difference in price from previous step
+delta = close.diff()
+# Get rid of the first row, which is NaN since it did not have a previous 
+# row to calculate the differences
+delta = delta[1:] 
+
+# Make the positive gains (up) and negative gains (down) Series
+up, down = delta.copy(), delta.copy()
+up[up < 0] = 0
+down[down > 0] = 0
+
+# Calculate the EWMA
+roll_up1 = pandas.stats.moments.ewma(up, window_length)
+roll_down1 = pandas.stats.moments.ewma(down.abs(), window_length)
+
+# Calculate the RSI based on EWMA
+RS1 = roll_up1 / roll_down1
+RSI1 = 100.0 - (100.0 / (1.0 + RS1))
+
+# Calculate the SMA
+roll_up2 = pandas.rolling_mean(up, window_length)
+roll_down2 = pandas.rolling_mean(down.abs(), window_length)
+
+# Calculate the RSI based on SMA
+RS2 = roll_up2 / roll_down2
+RSI2 = 100.0 - (100.0 / (1.0 + RS2))
