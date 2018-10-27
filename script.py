@@ -3,53 +3,46 @@ import datetime
 import logging
 import sched, time
 import json
+import pandas
+import pandas_datareader.data
 #import talib #pip install TA-Lib
 
 
 #needs AT LEAST 15 records to run
 def calculateRSI(prices):
-    changes=[]
-    avgGain=0
-    avgLoss=0
-    for x,price in enumerate(prices):
-        if(x==0):
-            x=1
-        changes.append(int(price)-int(prices[x-1]))
-    for x,change in enumerate(changes):
-        if change>0:
-            avgGain+=change
-        else:
-            avgLoss+=-change
-        if x==14:
-            break
-    avgGainInitial=avgGain/14
-    avgLossInitial=avgLoss/14
-    changes=changes[14:]
-    avgGain=[]
-    avgLoss=[]
-    RSI=[]
-    avgGain.append(avgGainInitial)
-    avgLoss.append(avgLossInitial)
-    for x,change in enumerate(changes):
-        if x==0:
-            continue
-        currentGain=0
-        currentLoss=0
-        if change>0:
-            currentGain=change
-        else:
-            currentLoss=-change
-        avgGain.append((avgGain[x-1]*13+currentGain)/14)
-        avgLoss.append((avgLoss[x-1]*13+currentLoss)/14)
-        if (avgLoss[x]*13+currentLoss)==0:
-            RSI.append(100)
-        else:
-            smoothedRS=avgGain[x]/avgLoss[x]
-            RSI.append(100-(100/(1+smoothedRS)))
 
 
-    return(RSI[-1])
+    close=pandas.Series(prices)
 
+    window_length = 14
+    # Get the difference in price from previous step
+    delta = close.diff()
+    # Get rid of the first row, which is NaN since it did not have a previous 
+    # row to calculate the differences
+    delta = delta[1:] 
+
+    # Make the positive gains (up) and negative gains (down) Series
+    up, down = delta.copy(), delta.copy()
+    up[up < 0] = 0
+    down[down > 0] = 0
+
+    # Calculate the EWMA
+    roll_up1 = pandas.stats.moments.ewma(up, window_length)
+    roll_down1 = pandas.stats.moments.ewma(down.abs(), window_length)
+
+    # Calculate the RSI based on EWMA
+    RS1 = roll_up1 / roll_down1
+    RSI1 = 100.0 - (100.0 / (1.0 + RS1))
+
+    # # Calculate the SMA
+    # roll_up2 = pandas.rolling_mean(up, window_length)
+    # roll_down2 = pandas.rolling_mean(down.abs(), window_length)
+
+    # # Calculate the RSI based on SMA
+    # RS2 = roll_up2 / roll_down2
+    # RSI2 = 100.0 - (100.0 / (1.0 + RS2))
+
+    return RSI1.iloc[-1]
 
 
 def help_collect_close_list(input_data):
@@ -173,43 +166,3 @@ s.run()
 # printit()
 
 
-
-import pandas
-import pandas_datareader.data
-
-
-
-candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
-prices=help_collect_close_list(candles[0])
-RSICurrent=calculateRSI(prices)
-
-
-close=pandas.Series(prices)
-
-window_length = 14
-# Get the difference in price from previous step
-delta = close.diff()
-# Get rid of the first row, which is NaN since it did not have a previous 
-# row to calculate the differences
-delta = delta[1:] 
-
-# Make the positive gains (up) and negative gains (down) Series
-up, down = delta.copy(), delta.copy()
-up[up < 0] = 0
-down[down > 0] = 0
-
-# Calculate the EWMA
-roll_up1 = pandas.stats.moments.ewma(up, window_length)
-roll_down1 = pandas.stats.moments.ewma(down.abs(), window_length)
-
-# Calculate the RSI based on EWMA
-RS1 = roll_up1 / roll_down1
-RSI1 = 100.0 - (100.0 / (1.0 + RS1))
-
-# Calculate the SMA
-roll_up2 = pandas.rolling_mean(up, window_length)
-roll_down2 = pandas.rolling_mean(down.abs(), window_length)
-
-# Calculate the RSI based on SMA
-RS2 = roll_up2 / roll_down2
-RSI2 = 100.0 - (100.0 / (1.0 + RS2))
