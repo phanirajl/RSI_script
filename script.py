@@ -6,7 +6,12 @@ import json
 import pandas
 import pandas_datareader.data
 #import talib #pip install TA-Lib
+from importlib import reload
 
+reload(logging)
+LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
+logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
+logger=logging.getLogger()
 
 #needs AT LEAST 15 records to run
 def calculateRSI(prices):
@@ -74,7 +79,7 @@ def help_collect_close_list(input_data):
     return close_list
 
 
-client = bitmex.bitmex(api_key="e-821dISZ8iE6BEwgh652dc3", api_secret="Y5ppArBDcE8pwlBHdilQOt32ANp6tMkd_U-1Rk8uiG2GB0Nr")
+client = bitmex.bitmex(test=False,api_key="E8w8QWkjsdjrSaoR_bvNAtlo", api_secret="pleqWpCHSEH3yVCNVDUdcyn9glU4yS0zlsrtiGFGrwow-G-V")
 #dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
@@ -83,22 +88,20 @@ profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
+    global profitRSI,listRSI
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
     RSICurrent=calculateRSI(prices)
-    LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
-    logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
-    logger=logging.getLogger()
     logger.info(RSICurrent)
     print(RSICurrent)
     print (prices[-1])
-    roundedRSI=round(RSICurrent)
+    roundedRSI=int(round(RSICurrent))
     #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
     #Buying low RSI
     if (roundedRSI<=20 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate')
+        client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
         listRSI[roundedRSI]=True
         logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
@@ -106,35 +109,46 @@ def algorithm():
     if (roundedRSI>=85 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate')
+        client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
         listRSI[roundedRSI]=True
         logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-    print (listRSI)
+
+
 ##################################################TAKING PROFITS BELOW##################################################################
 
     #Taking profits
     currency={"symbol": "XBTUSD"}
     position=client.Position.Position_get(filter= json.dumps(currency)).result()
-    quantity=position[0][0]["currentQty"]
+    quantity=position[0][0]["currentQty"]+1700
 
     #selling a long position
     if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-quantity/10, price=price,execInst='ParticipateDoNotInitiate')
+        client.Order.Order_new(symbol='XBTUSD', orderQty=-quantity/10, price=price,execInst='ParticipateDoNotInitiate').result()
         profitRSI[roundedRSI]=True
         logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        if(roundedRSI>40 and quantity==0):
+            listRSI=[False]*101
+            profitRSI=[False]*101
+            logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
 
-    #covering a long position
+    #covering a short position
     if (quantity<0 and roundedRSI<=77 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=quantity/10, price=price,execInst='ParticipateDoNotInitiate')
+        client.Order.Order_new(symbol='XBTUSD', orderQty=quantity/10, price=price,execInst='ParticipateDoNotInitiate').result()
         profitRSI[roundedRSI]=True
         logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-    print (profitRSI)
+        if(roundedRSI<60 and quantity==0):
+            listRSI=[False]*101
+            profitRSI=[False]*101
+            logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
 
-    s.enter(40, 1, algorithm)
+    print (profitRSI)
+    print (listRSI)
+
+    s.enter(120, 1, algorithm)
 
 s.enter(1, 1, algorithm)
 s.run()
