@@ -85,6 +85,7 @@ config.read("my_config.ini")
 key=(str(config['Keys']['akshay_api_key']))
 secret=(str(config['Keys']['akshay_api_secret']))
 client = bitmex.bitmex(test=False,api_key=key, api_secret=secret)
+orders=""
 #dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
@@ -93,7 +94,7 @@ profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
-    global profitRSI,listRSI
+    global profitRSI,listRSI,orders
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
     RSICurrent=calculateRSI(prices)
@@ -106,7 +107,8 @@ def algorithm():
     if (roundedRSI<=20 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=200, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+        orders=orders+","+result[0]['orderID']
         listRSI[roundedRSI]=True
         logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
@@ -114,7 +116,8 @@ def algorithm():
     if (roundedRSI>=80 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-200, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        orders=orders+","+result[0]['orderID']
         listRSI[roundedRSI]=True
         logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
@@ -130,12 +133,14 @@ def algorithm():
     if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=quantity/10, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
+        orders=orders+","+result[0]['orderID']
         profitRSI[roundedRSI]=True
         logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
         if(roundedRSI>40 and quantity==0):
+            client.Order.Order_cancel(orderID=results).result() #CANCEL ALL ACTIVE ORDERS
+            results=""
             listRSI=[False]*101
-            #CANCEL ALL ACTIVE ORDERS HERE
             profitRSI=[False]*101
             logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
 
@@ -143,11 +148,13 @@ def algorithm():
     if (quantity<0 and roundedRSI<=75 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        client.Order.Order_new(symbol='XBTUSD', orderQty=-quantity/10, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        orders=orders+","+result[0]['orderID']
         profitRSI[roundedRSI]=True
         logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
         if(roundedRSI<60 and quantity==0):
-            #CANCEL ALL ACTIVE ORDERS HERE
+            client.Order.Order_cancel(orderID=results).result() #CANCEL ALL ACTIVE ORDERS
+            results=""
             listRSI=[False]*101
             profitRSI=[False]*101
             logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
