@@ -3,7 +3,7 @@ import datetime
 import logging
 import sched, time
 import json
-import pandas
+import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
 import pandas_datareader.data
 import configparser
 #import talib #pip install TA-Lib
@@ -73,7 +73,7 @@ class RSI_Script(object):
             self.printl("Initializing the scheduler.", True)
             self.s = sched.scheduler(time.time, time.sleep)
             #self.s.enter(1, 1, self.algorithm)
-            self.s.enter(3, 1, self.dummy)
+            #self.s.enter(3, 1, self.dummy)
             self.s.run()
 
         except KeyboardInterrupt:
@@ -91,8 +91,8 @@ class RSI_Script(object):
     # Dummy method
     def dummy(self):
         
-        # Testing Pandas
-        pandas.test()
+        # Testing Pandas (Takes like 5 mins!)
+        # pandas.test()
 
         #Testing 4 types of outputs
         self.printl("Debug",logging.DEBUG,True)
@@ -238,7 +238,7 @@ class RSI_Script(object):
         #Taking profits
         currency = {"symbol": "XBTUSD"}
         position = self.client.Position.Position_get(filter= json.dumps(currency)).result()
-        quantity = position[0][0]["currentQty"]+1860
+        quantity = position[0][0]["currentQty"]+0 # 0'd, down from 1860.
 
         #selling a long position
         if (quantity > 0 and roundedRSI >= 25 and self.profitRSI[roundedRSI ]== False):
