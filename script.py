@@ -91,12 +91,19 @@ class RSI_Script(object):
     # Dummy method
     def dummy(self):
         
+        # Testing Pandas
+        pandas.test()
+
         #Testing 4 types of outputs
         self.printl("Debug",logging.DEBUG,True)
         self.printl("Info",logging.INFO,True)
         self.printl("Warning",logging.WARNING,True)
         self.printl("Error",logging.ERROR,True)
         
+        # Testing the Calcualte RIS method
+        the_result = self.calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
+        self.printl("The result if the RSI method is: "+str(the_result), logging.DEBUG, True)
+
         # Testing custom errors
         self.printl("About to raise and handle an error!", True)
         try:
@@ -272,20 +279,6 @@ class RSI_Script(object):
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
-
-#for logging in Ipython:
-
-
-#In [14]: from importlib import reload
-
-#In [15]: reload(logging)
-
-# In [8]: import logging
-#    ...: LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
-#    ...: logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
-#    ...: logger=logging.getLogger()
-#    ...: logger.warning('This message should go to the log file')
-#    ...: logger.level
 
 #import threading
 
