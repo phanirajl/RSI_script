@@ -6,13 +6,14 @@ import json
 import pandas
 import pandas_datareader.data
 import configparser
-#import talib #pip install TA-Lib
 from importlib import reload
 
 reload(logging)
 LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
 logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
 logger=logging.getLogger()
+
+CURRENT_POSITION=2040
 
 #needs AT LEAST 15 records to run
 def calculateRSI(prices):
@@ -88,6 +89,8 @@ client = bitmex.bitmex(test=False,api_key=key, api_secret=secret)
 prevorderProfit=""
 prevorderCover=""
 orders=""
+prevorderProfitPrice=0
+prevorderCoverPrice=0
 #dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
 
@@ -101,7 +104,7 @@ def algorithm():
     except:
         logger.info("Exception occured")
         s.enter(1, 1, algorithm)
-    global profitRSI,listRSI,orders,prevorderProfit,prevorderCover
+    global profitRSI,listRSI,orders,prevorderProfit,prevorderCover,prevorderProfitPrice,prevorderCoverPrice
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
     RSICurrent=calculateRSI(prices)
@@ -128,25 +131,28 @@ def algorithm():
         listRSI[roundedRSI]=True
         logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
-#TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now). So let's say $20 each order, which means buys of $200 rather than $30
+#TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
 ##################################################TAKING PROFITS BELOW##################################################################
 
     #Taking profits
     currency={"symbol": "XBTUSD"}
     position=client.Position.Position_get(filter= json.dumps(currency)).result()
-    quantity=position[0][0]["currentQty"]+1860
+    quantity=position[0][0]["currentQty"]+CURRENT_POSITION
 
     #selling a long position
     if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-        if prevorderProfit:
+        if prevorderProfit and prevorderProfitPrice != price:
             client.Order.Order_cancel(orderID=prevorderProfit).result()
             #logger.info("Cancelled existing order for taking profit")
         prevorderProfit=result[0]['orderID']
+        prevorderProfitPrice=price
         profitRSI[roundedRSI]=True
         logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+
+    #cleaning up orders and position arrays
     if(roundedRSI>40 and roundedRSI<60 and quantity==0):
         if orders:
             client.Order.Order_cancel(orderID=orders).result() #CANCEL ALL ACTIVE ORDERS
@@ -161,10 +167,11 @@ def algorithm():
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-        if prevorderCover:
+        if prevorderCover and prevorderCoverPrice != price:
             client.Order.Order_cancel(orderID=prevorderCover).result()
             #logger.info("Cancelled existing order for covering short")
         prevorderCover=result[0]['orderID']
+        prevorderCoverPrice=price
         profitRSI[roundedRSI]=True
         logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
     print (listRSI)
