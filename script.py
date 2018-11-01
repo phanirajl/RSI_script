@@ -96,6 +96,11 @@ profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
+    try:
+        s.enter(40, 1, algorithm)
+    except:
+        logger.info("Exception occured")
+        s.enter(1, 1, algorithm)
     global profitRSI,listRSI,orders,prevorderProfit,prevorderCover
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
@@ -166,7 +171,12 @@ def algorithm():
     print (profitRSI)
 
 
-    s.enter(40, 1, algorithm)
+
+    #     try:
+    #     s.enter(40, 1, algorithm)
+    # except:
+    #     logger.info("Exception occured")
+    #     s.enter(40, 1, algorithm)
 
 s.enter(1, 1, algorithm)
 s.run()
@@ -174,20 +184,6 @@ s.run()
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
-
-#for logging in Ipython:
-
-
-#In [14]: from importlib import reload
-
-#In [15]: reload(logging)
-
-# In [8]: import logging
-#    ...: LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
-#    ...: logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
-#    ...: logger=logging.getLogger()
-#    ...: logger.warning('This message should go to the log file')
-#    ...: logger.level
 
 #import threading
 
