@@ -1,10 +1,6 @@
 import json
 import datetime
-#from script import RSI_Script
 from script import RSI_Script
-import RSI_Errors
 
-print("run_script.py running.")
-
-#Create new RSI_Script
+# Create new RSI_Script, which kicks everything off!
 my_rsi = RSI_Script()

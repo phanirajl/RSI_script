@@ -20,20 +20,18 @@ from colorama import init, deinit, Fore, Back, Style
 class RSI_Script(object):
 
     # Class variables
-
     isAkshay = False # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
-    LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.
-    
+    LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
 
     # Initialization method. Called when a new instance of the RSI_Script object is created.
     def __init__(self):
         
         # Surround main initialization in a keyboard interrupt except.
         try:
-            
-            # Init Colorama
+
+            # Init Colorama, reset style chars after every message.
             init(autoreset=True)
-            print(Fore.GREEN+"This text should be green!")
+            
             #Reload logging module.
             reload(logging)
 
@@ -42,14 +40,14 @@ class RSI_Script(object):
 
             # Check which developer's settings to use. Grab key, secret, and client_test.
             if RSI_Script.isAkshay:
-                logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format=RSI_Script.LOG_FORMAT)
+                logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("my_config.ini")
                 self.key = str(self.config['Keys'].get('akshay_api_key'))
                 self.secret = str(self.config['Keys'].get('akshay_api_secret'))
                 self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False. i.e. Real money!
             else:
                 #logging.basicConfig(filename='C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\'+str(datetime.datetime.now())+".log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
-                logging.basicConfig(filename="C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\barrett.log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
+                logging.basicConfig(filename="C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\barrett.log", level=logging.DEBUG, format= RSI_Script.LOG_FORMAT)
                 self.config.read("barrett_config.ini")
                 self.key = str(self.config['Keys'].get('barrett_api_key'))
                 self.secret = str(self.config['Keys'].get('barrett_api_secret'))
@@ -72,40 +70,63 @@ class RSI_Script(object):
             self.profitRSI=[False]*101
             
             # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
-            print("Initializing the scheduler.")
+            self.printl("Initializing the scheduler.", True)
             self.s = sched.scheduler(time.time, time.sleep)
             #self.s.enter(1, 1, self.algorithm)
             self.s.enter(3, 1, self.dummy)
             self.s.run()
 
         except KeyboardInterrupt:
-            print("So you wanna stop, eh? Must not like money very much...")
-    
+            self.printl("So you wanna stop, eh? Must not like money very much...", logging.WARNING, True)
+
+        except Exception as e:
+            self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
+
         finally:
-            print("Cleaning up.")
+            self.printl("Cleaning up.", True)
             
             # De-init Colorama
             deinit()
 
     # Dummy method
     def dummy(self):
-        init(autoreset=True, strip=True)
-        self.logger.info("Hello World!")
+        
+        #Testing 4 types of outputs
+        self.printl("Debug",logging.DEBUG,True)
+        self.printl("Info",logging.INFO,True)
+        self.printl("Warning",logging.WARNING,True)
+        self.printl("Error",logging.ERROR,True)
         
         # Testing custom errors
-        print("About to raise and handle an error!")
+        self.printl("About to raise and handle an error!", True)
         try:
-            print("When you try your best and you....")
+            self.printl("When you try your best and you....", True)
             #raise RSI_Errors.RSI_Generic_Error("...don't suceeed!")
             raise RSI_Errors.RSI_Generic_Error()
+
         except RSI_Errors.RSI_Generic_Error as e:
-            print(Style.BRIGHT+Fore.RED+str(e))
-            print("Caught it right in the glove!")
+            self.printl(str(e),logging.ERROR)
+            self.printl("Caught it right in the glove!",logging.INFO,True)
         finally:
-            print("Handler complete.")
-            deinit()
+            self.printl("Handler complete.",True)
         # Return true, because why not!
         return True
+
+    # Log and Print helper method
+    def printl(self, message, level=logging.INFO, toConsole=False):
+        if level == logging.INFO: # Normal
+            self.logger.info(message) 
+            if toConsole: print(Style.NORMAL + message)
+        elif level == logging.DEBUG: # Cyan, Dim
+            self.logger.debug(message)
+            if toConsole: print(Style.DIM + Fore.CYAN + message)
+        elif level == logging.ERROR: # Red, Bright!
+            self.logger.error(message)
+            if toConsole: print(Style.BRIGHT + Fore.RED + message)
+        elif level == logging.WARNING: # Yellow
+            self.logger.warning(message)
+            if toConsole: print(Style.NORMAL + Fore.YELLOW + message)           
+        
 
     #needs AT LEAST 15 records to run
     def calculateRSI(self, prices):
@@ -153,7 +174,7 @@ class RSI_Script(object):
 
         # Check input_data is a List
         if type(input_data) is not list:
-            print("Error: parameter 'input_data' must be a List, not a "+str(type(input_data))+".")
+            self.printl("Error: parameter 'input_data' must be a List, not a "+str(type(input_data))+".", logging.ERROR, True)
             raise TypeError("parameter 'input_data' must be a List, not a "+str(type(input_data))+".")
 
         # Check incoming List for each 'record' dictionary of data.
@@ -163,10 +184,10 @@ class RSI_Script(object):
                 if "close" in record.keys():
                     close_list.append(record.get("close"))
                 else:
-                    print("Error: Record has no key attribute with name '"+"close"+"'.")
+                    self.printl("Error: Record has no key attribute with name '"+"close"+"'.", logging.ERROR, True)
                     raise ValueError("Record has no key attribute with name '"+"close"+"'.")
         else:
-            print("Error: parameter 'input_data' list is empty.")
+            self.printl("Error: parameter 'input_data' list is empty.", logging.ERROR, True)
             raise ValueError("parameter 'input_data' list is empty.")
 
         #Return the list of 'close' prices
@@ -182,8 +203,8 @@ class RSI_Script(object):
         prices = self.help_collect_close_list(candles[0])
         RSICurrent = self.calculateRSI(prices)
         self.logger.info(RSICurrent)
-        print(RSICurrent)
-        print(prices[-1])
+        self.printl(RSICurrent, True)
+        self.printl(prices[-1], True)
         roundedRSI = int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
@@ -243,8 +264,8 @@ class RSI_Script(object):
             self.prevorderCover = result[0]['orderID']
             self.profitRSI[roundedRSI] = True
             self.logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        print(self.listRSI)
-        print(self.profitRSI)
+        self.printl(self.listRSI, True)
+        self.printl(self.profitRSI, True)
 
         # TODO?: Should this still be here Akshay? 
         self.s.enter(40, 1, self.algorithm)
