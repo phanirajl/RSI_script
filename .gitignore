@@ -1,1 +1,6 @@
 my_config_testmex.ini 
+barrett_config\.ini
+
+__pycache__/
+
+logs/barrett\.log

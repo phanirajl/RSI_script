@@ -9,6 +9,12 @@ import configparser
 #import talib #pip install TA-Lib
 from importlib import reload
 
+# Import RSI Errors
+import RSI_Errors
+
+# Extras
+from colorama import init, deinit, Fore, Back, Style
+
 
 # Objectifying the Script
 class RSI_Script(object):
@@ -20,53 +26,85 @@ class RSI_Script(object):
     
 
     # Initialization method. Called when a new instance of the RSI_Script object is created.
-    def __init__(self, filename):
-
-        #Reload logging module.
-        reload(logging)
-
-        # Initialize config as object variables.
-        self.config = configparser.ConfigParser()
-
-        # Check which developer's settings to use. Grab key, secret, and client_test.
-        if RSI_Script.isAkshay:
-            logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format=RSI_Script.LOG_FORMAT)
-            self.config.read("my_config.ini")
-            self.key = str(self.config['Keys'].get('akshay_api_key'))
-            self.secret = str(self.config['Keys'].get('akshay_api_secret'))
-            self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False. i.e. Real money!
-        else:
-            logging.basicConfig(filename='C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\'+str(datetime.datetime.now())+".log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
-            self.config.read("barrett_config.ini")
-            self.key = str(self.config['Keys'].get('barrett_api_key'))
-            self.secret = str(self.config['Keys'].get('barrett_api_secret'))
-            self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True. i.e. No way in hell i'm using real money that's not mine!
-
-        # Initialize logger as an object variable as well.
-        self.logger=logging.getLogger()
-
-        # Initialize client as an object variable too. 
-        self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
-
-        # Here are some important object variables that will be used in the "algorithm",
-        # and need initializing here (apparently). 
-        self.prevorderProfit=""
-        self.prevorderCover=""
-        self.orders=""
-        #dir(client.Quote)
-        #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-        self.listRSI=[False]*101
-        self.profitRSI=[False]*101
+    def __init__(self):
         
-        # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
-        self.s = sched.scheduler(time.time, time.sleep)
-        #self.s.enter(1, 1, self.algorithm)
-        self.s.enter(3, 1, self.dummy)
-        self.s.run()
+        # Surround main initialization in a keyboard interrupt except.
+        try:
+            
+            # Init Colorama
+            init(autoreset=True)
+            print(Fore.GREEN+"This text should be green!")
+            #Reload logging module.
+            reload(logging)
+
+            # Initialize config as object variables.
+            self.config = configparser.ConfigParser()
+
+            # Check which developer's settings to use. Grab key, secret, and client_test.
+            if RSI_Script.isAkshay:
+                logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format=RSI_Script.LOG_FORMAT)
+                self.config.read("my_config.ini")
+                self.key = str(self.config['Keys'].get('akshay_api_key'))
+                self.secret = str(self.config['Keys'].get('akshay_api_secret'))
+                self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False. i.e. Real money!
+            else:
+                #logging.basicConfig(filename='C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\'+str(datetime.datetime.now())+".log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
+                logging.basicConfig(filename="C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\barrett.log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
+                self.config.read("barrett_config.ini")
+                self.key = str(self.config['Keys'].get('barrett_api_key'))
+                self.secret = str(self.config['Keys'].get('barrett_api_secret'))
+                self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True. i.e. No way in hell i'm using real money that's not mine!
+
+            # Initialize logger as an object variable as well.
+            self.logger=logging.getLogger()
+
+            # Initialize client as an object variable too. 
+            self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
+
+            # Here are some important object variables that will be used in the "algorithm",
+            # and need initializing here (apparently). 
+            self.prevorderProfit=""
+            self.prevorderCover=""
+            self.orders=""
+            #dir(client.Quote)
+            #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            self.listRSI=[False]*101
+            self.profitRSI=[False]*101
+            
+            # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
+            print("Initializing the scheduler.")
+            self.s = sched.scheduler(time.time, time.sleep)
+            #self.s.enter(1, 1, self.algorithm)
+            self.s.enter(3, 1, self.dummy)
+            self.s.run()
+
+        except KeyboardInterrupt:
+            print("So you wanna stop, eh? Must not like money very much...")
+    
+        finally:
+            print("Cleaning up.")
+            
+            # De-init Colorama
+            deinit()
 
     # Dummy method
     def dummy(self):
-        self.logger.info("Hello World! "+str(datetime.datetime.now()))
+        init(autoreset=True, strip=True)
+        self.logger.info("Hello World!")
+        
+        # Testing custom errors
+        print("About to raise and handle an error!")
+        try:
+            print("When you try your best and you....")
+            #raise RSI_Errors.RSI_Generic_Error("...don't suceeed!")
+            raise RSI_Errors.RSI_Generic_Error()
+        except RSI_Errors.RSI_Generic_Error as e:
+            print(Style.BRIGHT+Fore.RED+str(e))
+            print("Caught it right in the glove!")
+        finally:
+            print("Handler complete.")
+            deinit()
+        # Return true, because why not!
         return True
 
     #needs AT LEAST 15 records to run
