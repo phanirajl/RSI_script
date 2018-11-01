@@ -85,6 +85,8 @@ config.read("my_config.ini")
 key=(str(config['Keys']['akshay_api_key']))
 secret=(str(config['Keys']['akshay_api_secret']))
 client = bitmex.bitmex(test=False,api_key=key, api_secret=secret)
+prevorderProfit=""
+prevorderCover=""
 orders=""
 #dir(client.Quote)
 #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
@@ -94,7 +96,7 @@ profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
-    global profitRSI,listRSI,orders
+    global profitRSI,listRSI,orders,prevorderProfit,prevorderCover
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
     RSICurrent=calculateRSI(prices)
@@ -127,40 +129,42 @@ def algorithm():
     #Taking profits
     currency={"symbol": "XBTUSD"}
     position=client.Position.Position_get(filter= json.dumps(currency)).result()
-    quantity=position[0][0]["currentQty"]+1700
+    quantity=position[0][0]["currentQty"]+1860
 
     #selling a long position
     if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-        orders=orders+","+result[0]['orderID']
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        if prevorderProfit:
+            client.Order.Order_cancel(orderID=prevorderProfit).result()
+            #logger.info("Cancelled existing order for taking profit")
+        prevorderProfit=result[0]['orderID']
         profitRSI[roundedRSI]=True
         logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        if(roundedRSI>40 and quantity==0):
-            client.Order.Order_cancel(orderID=results).result() #CANCEL ALL ACTIVE ORDERS
-            results=""
-            listRSI=[False]*101
-            profitRSI=[False]*101
-            logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
+    if(roundedRSI>40 and roundedRSI<60 and quantity==0):
+        if orders:
+            client.Order.Order_cancel(orderID=orders).result() #CANCEL ALL ACTIVE ORDERS
+            orders=""
+            logger.info("Cancelled existing orders")
+        listRSI=[False]*101
+        profitRSI=[False]*101
+        logger.info("Resetted position arrays for RSI of: "+str(roundedRSI))
 
     #covering a short position
     if (quantity<0 and roundedRSI<=75 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-        orders=orders+","+result[0]['orderID']
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
+        if prevorderCover:
+            client.Order.Order_cancel(orderID=prevorderCover).result()
+            #logger.info("Cancelled existing order for covering short")
+        prevorderCover=result[0]['orderID']
         profitRSI[roundedRSI]=True
         logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        if(roundedRSI<60 and quantity==0):
-            client.Order.Order_cancel(orderID=results).result() #CANCEL ALL ACTIVE ORDERS
-            results=""
-            listRSI=[False]*101
-            profitRSI=[False]*101
-            logger.info("Resetted position arrays at price of :"+str(price)+" For RSI of: "+str(roundedRSI))
-
-    print (profitRSI)
     print (listRSI)
+    print (profitRSI)
+
 
     s.enter(40, 1, algorithm)
 
