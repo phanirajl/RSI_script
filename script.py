@@ -136,7 +136,10 @@ class RSI_Script(object):
 
     #run a loop to run this every 2 minutes
     def algorithm(self):
-        global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
+
+        # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
+        #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
+
         candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
         prices = self.help_collect_close_list(candles[0])
         RSICurrent = self.calculateRSI(prices)
@@ -146,21 +149,21 @@ class RSI_Script(object):
         roundedRSI = int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI <= 20 and listRSI[roundedRSI] == False):
+        if (roundedRSI <= 20 and self.listRSI[roundedRSI] == False):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][1]['price']#getting the bid price
             result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
-            orders = orders+","+result[0]['orderID']
-            listRSI[roundedRSI] = True
+            self.orders = self.orders+","+result[0]['orderID']
+            self.listRSI[roundedRSI] = True
             self.logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
         #Shorting high RSI
-        if (roundedRSI >= 80 and listRSI[roundedRSI] == False):
+        if (roundedRSI >= 80 and self.listRSI[roundedRSI] == False):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][0]['price'] # getting the ask price
             result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            orders = orders+","+result[0]['orderID']
-            listRSI[roundedRSI] = True
+            self.orders = self.orders+","+result[0]['orderID']
+            self.listRSI[roundedRSI] = True
             self.logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
         #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now). So let's say $20 each order, which means buys of $200 rather than $30
@@ -172,38 +175,38 @@ class RSI_Script(object):
         quantity = position[0][0]["currentQty"]+1860
 
         #selling a long position
-        if (quantity > 0 and roundedRSI >= 25 and profitRSI[roundedRSI ]== False):
+        if (quantity > 0 and roundedRSI >= 25 and self.profitRSI[roundedRSI ]== False):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][0]['price'] # getting the ask price
             result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if prevorderProfit:
-                self.client.Order.Order_cancel(orderID=prevorderProfit).result()
+            if self.prevorderProfit:
+                self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
                 #logger.info("Cancelled existing order for taking profit")
-            prevorderProfit = result[0]['orderID']
-            profitRSI[roundedRSI] = True
+            self.prevorderProfit = result[0]['orderID']
+            self.profitRSI[roundedRSI] = True
             self.logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
         if(roundedRSI > 40 and roundedRSI < 60 and quantity == 0):
-            if orders:
-                self.client.Order.Order_cancel(orderID=orders).result() # CANCEL ALL ACTIVE ORDERS
-                orders=""
+            if self.orders:
+                self.client.Order.Order_cancel(orderID=self.orders).result() # CANCEL ALL ACTIVE ORDERS
+                self.orders=""
                 self.logger.info("Cancelled existing orders")
-            listRSI = [False]*101
-            profitRSI = [False]*101
+            self.listRSI = [False]*101
+            self.profitRSI = [False]*101
             self.logger.info("Resetted position arrays for RSI of: "+str(roundedRSI))
 
         #covering a short position
-        if (quantity < 0 and roundedRSI <= 75 and profitRSI[roundedRSI] == False):
+        if (quantity < 0 and roundedRSI <= 75 and self.profitRSI[roundedRSI] == False):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][1]['price'] # getting the bid price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if prevorderCover:
-                self.client.Order.Order_cancel(orderID=prevorderCover).result()
+            if self.prevorderCover:
+                self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
                 #logger.info("Cancelled existing order for covering short")
-            prevorderCover = result[0]['orderID']
-            profitRSI[roundedRSI] = True
+            self.prevorderCover = result[0]['orderID']
+            self.profitRSI[roundedRSI] = True
             self.logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        print(listRSI)
-        print(profitRSI)
+        print(self.listRSI)
+        print(self.profitRSI)
 
         # TODO?: Should this still be here Akshay? 
         self.s.enter(40, 1, self.algorithm)

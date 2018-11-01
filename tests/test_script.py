@@ -15,30 +15,16 @@ class TestRSIScriptMethods(unittest.TestCase):
         self.my_rsi = RSI_Script()
     
     def test_with_example(self):
-        print("\t- Testing Akshay's example data.")
-        # Call the method with the example data. Test for the correct answer.
-        test_result = self.my_rsi.help_collect_close_list(self.my_rsi.example_value)
-        self.assertEqual(test_result, [13940.0, 13700.5])
+        print("\t- Testing [Method Name]")
+        test_input = {some real data here}
+        test_result = self.my_rsi.method_to_test(test_input)
+        self.assertEqual(test_result, correct answer here)
 
     @unittest.expectedFailure
     def test_error_non_list(self):
-        print("\t- Testing Error: Parameter non-List.")
-        test_input = {{'close': 13700.5, 'foreignNotional': 20502.0}}
-        with self.assertRaises(TypeError):
-            test_result = self.my_rsi.help_collect_close_list(test_input)
-    
-    @unittest.expectedFailure
-    def test_error_no_records(self):
-        print("\t- Testing Error: No records in List.")
-        test_input = {{}}
-        with self.assertRaises(ValueError):
-            test_result = self.my_rsi.help_collect_close_list(test_input)
-    
-    @unittest.expectedFailure
-    def test_error_no_close_key(self):
-        print("\t- Testing Error: No key 'close' in record.")
-        test_input = {{'foreignNotional': 20502.0}}
-        with self.assertRaises(ValueError):
+        print("\t- Testing Error: [Method Name]")
+        test_input = {some real data here}
+        with self.assertRaises(TypeErrorToCheckFor):
             test_result = self.my_rsi.help_collect_close_list(test_input)
 
     def tearDown(self):
