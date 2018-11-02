@@ -6,8 +6,8 @@ import json
 import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
 import pandas_datareader.data
 import configparser
-#import talib #pip install TA-Lib
 from importlib import reload
+import os
 
 # Import RSI Errors
 import RSI_Errors
@@ -46,8 +46,9 @@ class RSI_Script(object):
                 self.secret = str(self.config['Keys'].get('akshay_api_secret'))
                 self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False. i.e. Real money!
             else:
-                #logging.basicConfig(filename='C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\'+str(datetime.datetime.now())+".log", level=logging.INFO, format= RSI_Script.LOG_FORMAT)
-                logging.basicConfig(filename="C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs\\barrett.log", level=logging.DEBUG, format= RSI_Script.LOG_FORMAT)
+                filename = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7]#cheap hack, will fix later
+                filepath = os.path.join("C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs",filename+".log")
+                logging.basicConfig(filename=filepath, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("barrett_config.ini")
                 self.key = str(self.config['Keys'].get('barrett_api_key'))
                 self.secret = str(self.config['Keys'].get('barrett_api_secret'))
@@ -59,11 +60,16 @@ class RSI_Script(object):
             # Initialize client as an object variable too. 
             self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
 
+            # Akshay added this change.
+            self.CURRENT_POSITION=2040
+
             # Here are some important object variables that will be used in the "algorithm",
             # and need initializing here (apparently). 
             self.prevorderProfit=""
             self.prevorderCover=""
             self.orders=""
+            self.prevorderProfitPrice=0
+            self.prevorderCoverPrice=0
             #dir(client.Quote)
             #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             self.listRSI=[False]*101
@@ -72,14 +78,19 @@ class RSI_Script(object):
             # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
             self.printl("Initializing the scheduler.", True)
             self.s = sched.scheduler(time.time, time.sleep)
+            
             #self.s.enter(1, 1, self.algorithm)
             #self.s.enter(3, 1, self.dummy)
+            self.s.enter(1, 1, self.getbxresponse)
+            
             self.s.run()
 
         except KeyboardInterrupt:
+            # Program was interrupted by user.
             self.printl("So you wanna stop, eh? Must not like money very much...", logging.WARNING, True)
 
         except Exception as e:
+            # Some other excemption has occured, and is being genericaly handled here.
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
 
         finally:
@@ -90,20 +101,13 @@ class RSI_Script(object):
 
     # Dummy method
     def dummy(self):
-        
-        # Testing Pandas (Takes like 5 mins!)
-        # pandas.test()
-
+    
         #Testing 4 types of outputs
         self.printl("Debug",logging.DEBUG,True)
         self.printl("Info",logging.INFO,True)
         self.printl("Warning",logging.WARNING,True)
         self.printl("Error",logging.ERROR,True)
         
-        # Testing the Calcualte RIS method
-        the_result = self.calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
-        self.printl("The result if the RSI method is: "+str(the_result), logging.DEBUG, True)
-
         # Testing custom errors
         self.printl("About to raise and handle an error!", True)
         try:
@@ -113,11 +117,21 @@ class RSI_Script(object):
 
         except RSI_Errors.RSI_Generic_Error as e:
             self.printl(str(e),logging.ERROR)
-            self.printl("Caught it right in the glove!",logging.INFO,True)
+
         finally:
             self.printl("Handler complete.",True)
+        
         # Return true, because why not!
         return True
+
+    # Test Method
+    def getbxresponse(self):
+        bxresult = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
+        print(str(bxresult[0][0]))
+        print("len bxresult[0] and [0][0] is "+str(len(bxresult[0]))+" and "+str(len(bxresult[0][0]))+".")
+        print("len bxresult "+str(len(bxresult))+".")
+        #print(json.dumps(bxresult[1], indent=4))
+    
 
     # Log and Print helper method
     def printl(self, message, level=logging.INFO, toConsole=False):
@@ -232,25 +246,28 @@ class RSI_Script(object):
             self.listRSI[roundedRSI] = True
             self.logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
-        #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now). So let's say $20 each order, which means buys of $200 rather than $30
-        ##################################################TAKING PROFITS BELOW##################################################################
+        #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
+        ###################################TAKING PROFITS BELOW##################################################
 
         #Taking profits
         currency = {"symbol": "XBTUSD"}
         position = self.client.Position.Position_get(filter= json.dumps(currency)).result()
-        quantity = position[0][0]["currentQty"]+0 # 0'd, down from 1860.
+        quantity = position[0][0]["currentQty"]+self.CURRENT_POSITION
 
         #selling a long position
         if (quantity > 0 and roundedRSI >= 25 and self.profitRSI[roundedRSI ]== False):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][0]['price'] # getting the ask price
             result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if self.prevorderProfit:
+            if (self.prevorderProfit and self.prevorderProfitPrice != price):
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
                 #logger.info("Cancelled existing order for taking profit")
             self.prevorderProfit = result[0]['orderID']
+            self.prevorderProfitPrice = price
             self.profitRSI[roundedRSI] = True
             self.logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        
+        #cleaning up orders and position arrays
         if(roundedRSI > 40 and roundedRSI < 60 and quantity == 0):
             if self.orders:
                 self.client.Order.Order_cancel(orderID=self.orders).result() # CANCEL ALL ACTIVE ORDERS
@@ -265,10 +282,11 @@ class RSI_Script(object):
             level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price = level2Result[0][1]['price'] # getting the bid price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if self.prevorderCover:
+            if (self.prevorderCover and self.prevorderCoverPrice != price):
                 self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
                 #logger.info("Cancelled existing order for covering short")
             self.prevorderCover = result[0]['orderID']
+            self.prevorderCoverPrice=price
             self.profitRSI[roundedRSI] = True
             self.logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
         self.printl(self.listRSI, True)
