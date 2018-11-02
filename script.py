@@ -114,20 +114,27 @@ def algorithm():
     roundedRSI=int(round(RSICurrent))
     #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
     #Buying low RSI
-    if (roundedRSI<=20 and listRSI[roundedRSI]==False):
+    if (roundedRSI<=25 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
-        orders=orders+","+result[0]['orderID']
+        if orders:
+            orders=orders+","+result[0]['orderID']
+        else:
+            orders=result[0]['orderID']
+        
         listRSI[roundedRSI]=True
         logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
     #Shorting high RSI
-    if (roundedRSI>=80 and listRSI[roundedRSI]==False):
+    if (roundedRSI>=75 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-        orders=orders+","+result[0]['orderID']
+        if orders:
+            orders=orders+","+result[0]['orderID']
+        else:
+            orders=result[0]['orderID']
         listRSI[roundedRSI]=True
         logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
 
@@ -140,7 +147,7 @@ def algorithm():
     quantity=position[0][0]["currentQty"]+CURRENT_POSITION
 
     #selling a long position
-    if (quantity>0 and roundedRSI>=25 and profitRSI[roundedRSI]==False):
+    if (quantity>0 and roundedRSI>=30 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
@@ -163,7 +170,7 @@ def algorithm():
         logger.info("Resetted position arrays for RSI of: "+str(roundedRSI))
 
     #covering a short position
-    if (quantity<0 and roundedRSI<=75 and profitRSI[roundedRSI]==False):
+    if (quantity<0 and roundedRSI<=70 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
         result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
@@ -185,8 +192,13 @@ def algorithm():
     #     logger.info("Exception occured")
     #     s.enter(40, 1, algorithm)
 
-s.enter(1, 1, algorithm)
-s.run()
+try:
+    s.enter(1, 1, algorithm)
+    s.run()
+except:
+    logger.info("Exception occured")
+    s.enter(1, 1, algorithm)
+    s.run()
 
 
 ###########################################
