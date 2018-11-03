@@ -13,7 +13,7 @@ LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
 logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
 logger=logging.getLogger()
 
-CURRENT_POSITION=2040
+CURRENT_POSITION=2010
 
 #needs AT LEAST 15 records to run
 def calculateRSI(prices):
@@ -99,11 +99,11 @@ profitRSI=[False]*101
 s = sched.scheduler(time.time, time.sleep)
 #run a loop to run this every 2 minutes
 def algorithm():
-    try:
-        s.enter(40, 1, algorithm)
-    except:
-        logger.info("Exception occured")
-        s.enter(1, 1, algorithm)
+    # try:
+    #     s.enter(40, 1, algorithm)
+    # except:
+    #     logger.info("Exception occured")
+    #     s.enter(1, 1, algorithm)
     global profitRSI,listRSI,orders,prevorderProfit,prevorderCover,prevorderProfitPrice,prevorderCoverPrice
     candles=client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
     prices=help_collect_close_list(candles[0])
@@ -117,7 +117,7 @@ def algorithm():
     if (roundedRSI<=25 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
         if orders:
             orders=orders+","+result[0]['orderID']
         else:
@@ -130,7 +130,7 @@ def algorithm():
     if (roundedRSI>=75 and listRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
         if orders:
             orders=orders+","+result[0]['orderID']
         else:
@@ -150,7 +150,7 @@ def algorithm():
     if (quantity>0 and roundedRSI>=30 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][0]['price']#getting the ask price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
         if prevorderProfit and prevorderProfitPrice != price:
             client.Order.Order_cancel(orderID=prevorderProfit).result()
             #logger.info("Cancelled existing order for taking profit")
@@ -173,7 +173,7 @@ def algorithm():
     if (quantity<0 and roundedRSI<=70 and profitRSI[roundedRSI]==False):
         level2Result=client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         price=level2Result[0][1]['price']#getting the bid price
-        result=client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
+        result=client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
         if prevorderCover and prevorderCoverPrice != price:
             client.Order.Order_cancel(orderID=prevorderCover).result()
             #logger.info("Cancelled existing order for covering short")
@@ -183,6 +183,8 @@ def algorithm():
         logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
     print (listRSI)
     print (profitRSI)
+    time.sleep(40)
+
 
 
 
@@ -191,14 +193,20 @@ def algorithm():
     # except:
     #     logger.info("Exception occured")
     #     s.enter(40, 1, algorithm)
+while  True:
+    try:
+        algorithm()
+    except:
+        logger.info("Exception occured")
+        #algorithm()
 
-try:
-    s.enter(1, 1, algorithm)
-    s.run()
-except:
-    logger.info("Exception occured")
-    s.enter(1, 1, algorithm)
-    s.run()
+# try:
+#     s.enter(1, 1, algorithm)
+#     s.run()
+# except:
+#     logger.info("Exception occured")
+#     s.enter(1, 1, algorithm)
+#     s.run()
 
 
 ###########################################
