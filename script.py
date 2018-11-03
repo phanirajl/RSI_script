@@ -168,8 +168,6 @@ class RSI_Script(object):
             response_object -- This is the output of the "self.client.XXXXXX().result()" call.
             silent -- A flag to control whether python errors are raised by this method. Logs will always be written.
         """
-
-
         # respponse_object <class 'tuple'>, length 2
         # respponse_object[0] <class 'list'>, length N (this is how many data items there are)
         # respponse_object[0][0] <class 'dict'> length M (this is how many attributes each item has)
@@ -206,6 +204,9 @@ class RSI_Script(object):
     def help_collect_close_list(self, input_data):
         """
         Helper method, in order to isolate the "close" values of each record in the incoming list.
+
+        Attributes:
+            input_data -- This is the List of records that need
         """
         close_list = []
         #print(json.dumps(input_data[0], indent=4))
