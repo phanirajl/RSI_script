@@ -158,6 +158,18 @@ class RSI_Script(object):
 
     # Helper
     def bitmex_response_helper(self, response_object, silent=False):
+        """
+        This method is used to read the response from the Bitmex client, and look at the status
+        of the response. If the call has failed (ie. HTTP status != 200), it will log it, and
+        can raise the specific HTTP erro exception, providing the exact details from the 
+        response.
+        
+        Attributes:
+            response_object -- This is the output of the "self.client.XXXXXX().result()" call.
+            silent -- A flag to control whether python errors are raised by this method. Logs will always be written.
+        """
+
+
         # respponse_object <class 'tuple'>, length 2
         # respponse_object[0] <class 'list'>, length N (this is how many data items there are)
         # respponse_object[0][0] <class 'dict'> length M (this is how many attributes each item has)
