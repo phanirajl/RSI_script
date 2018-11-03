@@ -81,9 +81,9 @@ class RSI_Script(object):
             
             #self.s.enter(1, 1, self.algorithm)
             #self.s.enter(3, 1, self.dummy)
-            self.s.enter(1, 1, self.getbxresponse)
-            
-            self.s.run()
+            # self.s.run()
+
+            self.getbxresponse()
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -126,11 +126,19 @@ class RSI_Script(object):
 
     # Test Method
     def getbxresponse(self):
-        bxresult = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
-        print(str(bxresult[0][0]))
-        print("len bxresult[0] and [0][0] is "+str(len(bxresult[0]))+" and "+str(len(bxresult[0][0]))+".")
-        print("len bxresult "+str(len(bxresult))+".")
-        #print(json.dumps(bxresult[1], indent=4))
+        bxres = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now())
+        print("bxres is "+str(type(bxres)))
+        bxresult = bxres.result()
+        print("bxresult is "+str(type(bxresult))+" and has len "+str(len(bxresult)))
+        print("bxresult[0] is "+str(type(bxresult[0]))+" and has len "+str(len(bxresult[0])))
+        print("bxresult[1] is "+str(type(bxresult[1]))) # RRA has no len 
+        print("bxresult[0][0] is "+str(type(bxresult[0][0])))
+        print("bxresult[0][1] is "+str(type(bxresult[0][1])))
+        print("RRA status_code: "+str(bxresult[1].status_code))
+        print("RRA reason: "+str(bxresult[1].reason))
+        #print("RRA text: "+str(bxresult[1].text)) # this is the content, scrap
+        print("RRA headers: "+str(bxresult[1].headers))
+        #print("bxresult[1][0] is "+str(type(bxresult[1][0])))
     
 
     # Log and Print helper method
@@ -147,7 +155,69 @@ class RSI_Script(object):
         elif level == logging.WARNING: # Yellow
             self.logger.warning(message)
             if toConsole: print(Style.NORMAL + Fore.YELLOW + message)           
-        
+
+    # Helper
+    def bitmex_response_helper(self, response_object, silent=False):
+        # respponse_object <class 'tuple'>, length 2
+        # respponse_object[0] <class 'list'>, length N (this is how many data items there are)
+        # respponse_object[0][0] <class 'dict'> length M (this is how many attributes each item has)
+        # response_object[1] <class 'bravado.requests_client.RequestsResponseAdapter'>
+        #       https://bravado.readthedocs.io/en/stable/bravado.html#bravado.requests_client.RequestsResponseAdapter
+
+        #Type validation, response_object must be 'tuple'.
+        if type(response_object) is not tuple:
+            self.printl("Error: parameter 'response_object' must be a Tuple, not a "+str(type(response_object))+".", logging.ERROR, True)
+            raise TypeError("parameter 'input_data' must be a List, not a "+str(type(response_object))+".")
+
+        # Grab http code, check for success 200
+        http_status = int(response_object[1].status_code)
+        if http_status == 200:
+            return
+        else:
+            # We have a non-success. Grab relevant information
+            http_reason = response_object[1].reason
+            http_headers = response_object[1].headers
+
+            # Without silence, we throw an error
+            if http_status == 400:
+                self.printl("Bitmex Response Helper: Recieved a HTTP 400 result. "+http_reason)
+                if not silent: raise RSI_Errors.HTTP_400_Error("Bitmex Response Helper: Recieved a HTTP 400 result.", http_reason)
+            elif http_status == 403:
+                self.printl("Bitmex Response Helper: Recieved a HTTP 403 result. "+http_reason)
+                if not silent: raise RSI_Errors.HTTP_403_Error("Bitmex Response Helper: Recieved a HTTP 403 result.", http_reason)
+            elif http_status == 503:
+                self.printl("Bitmex Response Helper: Recieved a HTTP 503 result. "+http_reason)
+                if not silent: raise RSI_Errors.HTTP_503_Error("Bitmex Response Helper: Recieved a HTTP 503 result.", http_reason)
+
+                
+    # Helper to calculate the "close" values of each record in the incoming list
+    def help_collect_close_list(self, input_data):
+        """
+        Helper method, in order to isolate the "close" values of each record in the incoming list.
+        """
+        close_list = []
+        #print(json.dumps(input_data[0], indent=4))
+
+        # Check input_data is a List
+        if type(input_data) is not list:
+            self.printl("Error: parameter 'input_data' must be a List, not a "+str(type(input_data))+".", logging.ERROR, True)
+            raise TypeError("parameter 'input_data' must be a List, not a "+str(type(input_data))+".")
+
+        # Check incoming List for each 'record' dictionary of data.
+        if len(input_data)>0:
+            # Iterate through each record, check for its 'close' price, and append to close_list
+            for record in input_data:
+                if "close" in record.keys():
+                    close_list.append(record.get("close"))
+                else:
+                    self.printl("Error: Record has no key attribute with name '"+"close"+"'.", logging.ERROR, True)
+                    raise ValueError("Record has no key attribute with name '"+"close"+"'.")
+        else:
+            self.printl("Error: parameter 'input_data' list is empty.", logging.ERROR, True)
+            raise ValueError("parameter 'input_data' list is empty.")
+
+        #Return the list of 'close' prices
+        return close_list
 
     #needs AT LEAST 15 records to run
     def calculateRSI(self, prices):
@@ -185,34 +255,6 @@ class RSI_Script(object):
         # RSI2 = 100.0 - (100.0 / (1.0 + RS2))
 
         return RSI1.iloc[-1]
-
-    def help_collect_close_list(self, input_data):
-        """
-        Helper method, in order to isolate the "close" values of each record in the incoming list.
-        """
-        close_list = []
-        #print(json.dumps(input_data[0], indent=4))
-
-        # Check input_data is a List
-        if type(input_data) is not list:
-            self.printl("Error: parameter 'input_data' must be a List, not a "+str(type(input_data))+".", logging.ERROR, True)
-            raise TypeError("parameter 'input_data' must be a List, not a "+str(type(input_data))+".")
-
-        # Check incoming List for each 'record' dictionary of data.
-        if len(input_data)>0:
-            # Iterate through each record, check for its 'close' price, and append to close_list
-            for record in input_data:
-                if "close" in record.keys():
-                    close_list.append(record.get("close"))
-                else:
-                    self.printl("Error: Record has no key attribute with name '"+"close"+"'.", logging.ERROR, True)
-                    raise ValueError("Record has no key attribute with name '"+"close"+"'.")
-        else:
-            self.printl("Error: parameter 'input_data' list is empty.", logging.ERROR, True)
-            raise ValueError("parameter 'input_data' list is empty.")
-
-        #Return the list of 'close' prices
-        return close_list
 
     #run a loop to run this every 2 minutes
     def algorithm(self):
