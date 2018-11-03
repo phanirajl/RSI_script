@@ -6,7 +6,7 @@ import json
 import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
 import pandas_datareader.data
 import configparser
-from importlib import reload
+#from importlib import reload
 import os
 
 # Import RSI Errors
