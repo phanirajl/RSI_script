@@ -8,6 +8,7 @@ import pandas_datareader.data
 import configparser
 from importlib import reload
 import os
+import time
 
 # Import RSI Errors
 import RSI_Errors
@@ -18,9 +19,11 @@ from colorama import init, deinit, Fore, Back, Style
 
 # Objectifying the Script
 class RSI_Script(object):
+"""
+This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
+"""
 
-    # Class variables
-    isAkshay = False # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
+    # Class Constants ("class variables")
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
 
     # Initialization method. Called when a new instance of the RSI_Script object is created.
@@ -29,9 +32,12 @@ class RSI_Script(object):
         # Surround main initialization in a keyboard interrupt except.
         try:
 
+            # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
+            self.isAkshay = False
+
             # Init Colorama, reset style chars after every message.
             init(autoreset=True)
-            
+
             #Reload logging module.
             reload(logging)
 
@@ -39,29 +45,36 @@ class RSI_Script(object):
             self.config = configparser.ConfigParser()
 
             # Check which developer's settings to use. Grab key, secret, and client_test.
-            if RSI_Script.isAkshay:
+            if self.isAkshay:
                 logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("my_config.ini")
                 self.key = str(self.config['Keys'].get('akshay_api_key'))
                 self.secret = str(self.config['Keys'].get('akshay_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False. i.e. Real money!
+                self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False
             else:
-                filename = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7]#cheap hack, will fix later
-                filepath = os.path.join("C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs",filename+".log")
-                logging.basicConfig(filename=filepath, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+                FILENAME = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
+                LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
+                #LOG_DESTINATION = os.path.join("C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs",FILENAME+".log")
+                logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("barrett_config.ini")
                 self.key = str(self.config['Keys'].get('barrett_api_key'))
                 self.secret = str(self.config['Keys'].get('barrett_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True. i.e. No way in hell i'm using real money that's not mine!
+                self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True.
 
             # Initialize logger as an object variable as well.
             self.logger=logging.getLogger()
 
+            # Log which Dev is using.
+            if self.isAkshay:
+                self.printl("Using Akshay's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
+            else:
+                self.printl("Using Barrett's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
+
             # Initialize client as an object variable too. 
             self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
 
-            # Akshay added this change.
-            self.CURRENT_POSITION=2040
+            # Akshay added this change for TestMex specifically.
+            self.CURRENT_POSITION=0
 
             # Here are some important object variables that will be used in the "algorithm",
             # and need initializing here (apparently). 
@@ -76,14 +89,11 @@ class RSI_Script(object):
             self.profitRSI=[False]*101
             
             # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
-            self.printl("Initializing the scheduler.", True)
+            self.printl("Initializing the scheduler.", logging.DEBUG, True)
             self.s = sched.scheduler(time.time, time.sleep)
             
             #self.s.enter(1, 1, self.algorithm)
-            #self.s.enter(3, 1, self.dummy)
-            # self.s.run()
-
-            self.getbxresponse()
+            # self.s.run()            
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -95,54 +105,21 @@ class RSI_Script(object):
 
         finally:
             self.printl("Cleaning up.", True)
-            
+            self.dummy()
             # De-init Colorama
-            deinit()
-
-    # Dummy method
-    def dummy(self):
-    
-        #Testing 4 types of outputs
-        self.printl("Debug",logging.DEBUG,True)
-        self.printl("Info",logging.INFO,True)
-        self.printl("Warning",logging.WARNING,True)
-        self.printl("Error",logging.ERROR,True)
-        
-        # Testing custom errors
-        self.printl("About to raise and handle an error!", True)
-        try:
-            self.printl("When you try your best and you....", True)
-            #raise RSI_Errors.RSI_Generic_Error("...don't suceeed!")
-            raise RSI_Errors.RSI_Generic_Error()
-
-        except RSI_Errors.RSI_Generic_Error as e:
-            self.printl(str(e),logging.ERROR)
-
-        finally:
-            self.printl("Handler complete.",True)
-        
-        # Return true, because why not!
-        return True
-
-    # Test Method
-    def getbxresponse(self):
-        bxres = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now())
-        print("bxres is "+str(type(bxres)))
-        bxresult = bxres.result()
-        print("bxresult is "+str(type(bxresult))+" and has len "+str(len(bxresult)))
-        print("bxresult[0] is "+str(type(bxresult[0]))+" and has len "+str(len(bxresult[0])))
-        print("bxresult[1] is "+str(type(bxresult[1]))) # RRA has no len 
-        print("bxresult[0][0] is "+str(type(bxresult[0][0])))
-        print("bxresult[0][1] is "+str(type(bxresult[0][1])))
-        print("RRA status_code: "+str(bxresult[1].status_code))
-        print("RRA reason: "+str(bxresult[1].reason))
-        #print("RRA text: "+str(bxresult[1].text)) # this is the content, scrap
-        print("RRA headers: "+str(bxresult[1].headers))
-        #print("bxresult[1][0] is "+str(type(bxresult[1][0])))
-    
+            deinit()    
 
     # Log and Print helper method
     def printl(self, message, level=logging.INFO, toConsole=False):
+        """
+        This method is a helper to be able to write information to both the 'console' AND 
+        the 'log' file. It's so that way you can "write it once", and have it outputed twice
+        if needed (cleaning up a bit of the code).
+        
+        Attributes:
+            message -- This is the text to be shown.
+            //!@#resume
+        """
         if level == logging.INFO: # Normal
             self.logger.info(message) 
             if toConsole: print(Style.NORMAL + message)
