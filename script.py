@@ -13,7 +13,7 @@ LOG_FORMAT="%(levelname)s %(asctime)s - %(message)s"
 logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.INFO, format='%(levelname)s - %(asctime)s - %(message)s')
 logger=logging.getLogger()
 
-CURRENT_POSITION=2010
+CURRENT_POSITION=0
 
 #needs AT LEAST 15 records to run
 def calculateRSI(prices):
@@ -193,11 +193,13 @@ def algorithm():
     # except:
     #     logger.info("Exception occured")
     #     s.enter(40, 1, algorithm)
+
 while  True:
     try:
         algorithm()
-    except:
-        logger.info("Exception occured")
+    except Exception as e:
+        logger.info("Exception occured "+str(e))
+        time.sleep(1)
         #algorithm()
 
 # try:
