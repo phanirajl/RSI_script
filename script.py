@@ -19,10 +19,9 @@ from colorama import init, deinit, Fore, Back, Style
 
 # Objectifying the Script
 class RSI_Script(object):
-"""
-This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
-"""
-
+    """
+    This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
+    """
     # Class Constants ("class variables")
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
 
@@ -46,7 +45,8 @@ This is the object that encompasses the trading logic itself. It can be instanti
 
             # Check which developer's settings to use. Grab key, secret, and client_test.
             if self.isAkshay:
-                logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+                LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
+                logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("my_config.ini")
                 self.key = str(self.config['Keys'].get('akshay_api_key'))
                 self.secret = str(self.config['Keys'].get('akshay_api_secret'))
@@ -54,7 +54,6 @@ This is the object that encompasses the trading logic itself. It can be instanti
             else:
                 FILENAME = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
                 LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
-                #LOG_DESTINATION = os.path.join("C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs",FILENAME+".log")
                 logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
                 self.config.read("barrett_config.ini")
                 self.key = str(self.config['Keys'].get('barrett_api_key'))
@@ -105,11 +104,11 @@ This is the object that encompasses the trading logic itself. It can be instanti
 
         finally:
             self.printl("Cleaning up.", True)
-            self.dummy()
+
             # De-init Colorama
             deinit()    
 
-    # Log and Print helper method
+    # Log and Print helper method.
     def printl(self, message, level=logging.INFO, toConsole=False):
         """
         This method is a helper to be able to write information to both the 'console' AND 
@@ -133,7 +132,7 @@ This is the object that encompasses the trading logic itself. It can be instanti
             self.logger.warning(message)
             if toConsole: print(Style.NORMAL + Fore.YELLOW + message)           
 
-    # Helper
+    # Helper to raise custom exceptions in Bitmex response objects.
     def bitmex_response_helper(self, response_object, silent=False):
         """
         This method is used to read the response from the Bitmex client, and look at the status
@@ -163,7 +162,7 @@ This is the object that encompasses the trading logic itself. It can be instanti
         else:
             # We have a non-success. Grab relevant information
             http_reason = response_object[1].reason
-            http_headers = response_object[1].headers
+            #http_headers = response_object[1].headers #header can be used if needed in future.
 
             # Without silence, we throw an error
             if http_status == 400:
@@ -177,7 +176,7 @@ This is the object that encompasses the trading logic itself. It can be instanti
                 if not silent: raise RSI_Errors.HTTP_503_Error("Bitmex Response Helper: Recieved a HTTP 503 result.", http_reason)
 
                 
-    # Helper to calculate the "close" values of each record in the incoming list
+    # Helper to calculate the "close" values of each record in the incoming list.
     def help_collect_close_list(self, input_data):
         """
         Helper method, in order to isolate the "close" values of each record in the incoming list.
@@ -211,11 +210,16 @@ This is the object that encompasses the trading logic itself. It can be instanti
 
     #needs AT LEAST 15 records to run
     def calculateRSI(self, prices):
+        """
+        Method to calculate the RSI of a input set of prices.
+
+        Attributes:
+            prices -- These are the prices to calcualte the RSI from. Data type must be an "array-like", dict, or scalar value, according to the "pandas.Series" method's 'data' parameter.
+        """
+        close=pandas.Series(prices)
+
         window_length = 14
 
-        # Create a panda series with the incoming prices.
-        close=pandas.Series(prices)
-        
         # Get the difference in price from previous step
         delta = close.diff()
 
@@ -246,86 +250,93 @@ This is the object that encompasses the trading logic itself. It can be instanti
 
         return RSI1.iloc[-1]
 
-    #run a loop to run this every 2 minutes
+    # Akshay's trading algorithm.
     def algorithm(self):
-
+        """
+        This is Akshay's trading algorithm, which is commented inline.
+        """
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
 
-        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
-        prices = self.help_collect_close_list(candles[0])
-        RSICurrent = self.calculateRSI(prices)
-        self.logger.info(RSICurrent)
-        self.printl(RSICurrent, True)
-        self.printl(prices[-1], True)
-        roundedRSI = int(round(RSICurrent))
+        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
+        prices=self.help_collect_close_list(candles[0])
+        RSICurrent=self.calculateRSI(prices)
+        self.printl(RSICurrent, logging.DEBUG, True)
+        print(RSICurrent)
+        print (prices[-1])
+        roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI <= 20 and self.listRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][1]['price']#getting the bid price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
-            self.orders = self.orders+","+result[0]['orderID']
-            self.listRSI[roundedRSI] = True
-            self.logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        if (roundedRSI<=25 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][1]['price']#getting the bid price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+            if self.listRSI:
+                self.listRSI=self.listRSI+","+result[0]['orderID']
+            else:
+                self.orders=result[0]['orderID']
+            
+            self.listRSI[roundedRSI]=True
+            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
 
         #Shorting high RSI
-        if (roundedRSI >= 80 and self.listRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][0]['price'] # getting the ask price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            self.orders = self.orders+","+result[0]['orderID']
-            self.listRSI[roundedRSI] = True
-            self.logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][0]['price']#getting the ask price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.orders:
+                self.orders=self.orders+","+result[0]['orderID']
+            else:
+                self.orders=result[0]['orderID']
+            self.listRSI[roundedRSI]=True
+            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
 
         #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
-        ###################################TAKING PROFITS BELOW##################################################
+        ##################################################TAKING PROFITS BELOW##################################################################
 
         #Taking profits
-        currency = {"symbol": "XBTUSD"}
-        position = self.client.Position.Position_get(filter= json.dumps(currency)).result()
-        quantity = position[0][0]["currentQty"]+self.CURRENT_POSITION
+        currency={"symbol": "XBTUSD"}
+        position=self.client.Position.Position_get(filter= json.dumps(currency)).result()
+        quantity=position[0][0]["currentQty"]+self.CURRENT_POSITION
 
         #selling a long position
-        if (quantity > 0 and roundedRSI >= 25 and self.profitRSI[roundedRSI ]== False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][0]['price'] # getting the ask price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if (self.prevorderProfit and self.prevorderProfitPrice != price):
+        if (quantity>0 and roundedRSI>=30 and self.profitRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][0]['price']#getting the ask price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.prevorderProfit and self.prevorderProfitPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
-                #logger.info("Cancelled existing order for taking profit")
-            self.prevorderProfit = result[0]['orderID']
-            self.prevorderProfitPrice = price
-            self.profitRSI[roundedRSI] = True
-            self.logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        
+                #self.printl("Cancelled existing order for taking profit", logging.DEBUG, True)
+            self.prevorderProfit=result[0]['orderID']
+            self.prevorderProfitPrice=price
+            self.profitRSI[roundedRSI]=True
+            self.printl("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
+
         #cleaning up orders and position arrays
-        if(roundedRSI > 40 and roundedRSI < 60 and quantity == 0):
+        if(roundedRSI>40 and roundedRSI<60 and quantity==0):
             if self.orders:
-                self.client.Order.Order_cancel(orderID=self.orders).result() # CANCEL ALL ACTIVE ORDERS
+                self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
                 self.orders=""
-                self.logger.info("Cancelled existing orders")
-            self.listRSI = [False]*101
-            self.profitRSI = [False]*101
-            self.logger.info("Resetted position arrays for RSI of: "+str(roundedRSI))
+                self.printl("Cancelled existing orders", logging.DEBUG, True)
+            self.listRSI=[False]*101
+            self.profitRSI=[False]*101
+            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.DEBUG, True)
 
         #covering a short position
-        if (quantity < 0 and roundedRSI <= 75 and self.profitRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][1]['price'] # getting the bid price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if (self.prevorderCover and self.prevorderCoverPrice != price):
+        if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][1]['price']#getting the bid price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.prevorderCover and self.prevorderCoverPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
-                #logger.info("Cancelled existing order for covering short")
-            self.prevorderCover = result[0]['orderID']
+                #self.printl("Cancelled existing order for covering short", logging.DEBUG, True)
+            self.prevorderCover=result[0]['orderID']
             self.prevorderCoverPrice=price
-            self.profitRSI[roundedRSI] = True
-            self.logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        self.printl(self.listRSI, True)
-        self.printl(self.profitRSI, True)
-
-        # TODO?: Should this still be here Akshay? 
-        self.s.enter(40, 1, self.algorithm)
+            self.profitRSI[roundedRSI]=True
+            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
+        print (self.listRSI)
+        print (self.profitRSI)
+        time.sleep(40)
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
