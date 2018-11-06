@@ -24,11 +24,6 @@ from django.core.serializers.json import DjangoJSONEncoder #https://stackoverflo
 #import pytz
 #from pytz import timezone as pytztimezone
 
-# Default Timezones
-TIMEZONE_KELOWNA = timezone(-timedelta(hours=8), name="Kelowna") # GMT-8
-TIMEZONE_TORONTO = timezone(-timedelta(hours=5), name="Toronto") # GMT-5
-
-
 # Objectifying the Script
 class RSI_Script(object):
     """
@@ -39,14 +34,17 @@ class RSI_Script(object):
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
     
     # Initialization method. Called when a new instance of the RSI_Script object is created.
-    def __init__(self, selected_timezone=TIMEZONE_KELOWNA):
+    def __init__(self, selected_timezone):
         
         # Reload logging module.
         reload(logging)
 
+        # Instance of RSI_Timezone
+        self.my_rsi_timezone = RSI_Timezone()
+
         # The selected timezone for the rest of the application to use.
-        #NOTE: Note the logger doesn't use this yet. Look into pytz module.
-        self.SELECTED_TIMEZONE = selected_timezone # By default, run from Kelowna time.
+        #NOTE: Note the logger doesn't use this yet.
+        self.SELECTED_TIMEZONE = selected_timezone
         
         # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
         self.isAkshay = False
@@ -120,12 +118,8 @@ class RSI_Script(object):
             # print("[~~~~~AKSHAY's AWESOME CODE GOES HERE~~~~~~~]")
             # time.sleep(2)
 
-            #Try to learn something about timezones....
-            self.time_zone_test()
-            
             # Run the algorithm: the real work.
             self.algorithm()
-
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -159,7 +153,8 @@ class RSI_Script(object):
         
         Attributes:
             message -- This is the text to be shown.
-            //!@#resume
+            level -- This is the logging level to use. Must be a constant of the logging class.
+            toConsole -- This boolean flag describes if you want the message to be printed to the console in addition to the log file.
         """
         if level == logging.INFO: # Normal
             self.logger.info(message) 
@@ -269,45 +264,6 @@ class RSI_Script(object):
             self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
             raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
 
-    def time_zone_test(self):
-        #print(pytz.country_names['ca'])
-        #print(' '.join(pytz.country_timezones['ca']))
-
-        # THIS IS INCORRECT!
-        # utc = pytz.utc
-        # utc.zone
-        # kelowna = pytztimezone("America/Vancouver")
-        # toronto = pytztimezone("America/Toronto")
-        # local_kelowna = kelowna.localize(datetime.datetime.utcnow())
-        # local_toronto = toronto.localize(datetime.datetime.utcnow())
-        # print("Kelowna: "+str(local_kelowna))
-        # print("Toronto: "+str(local_toronto))
-
-        # south_africa = pytztimezone('America/Toronto')
-        # sa_time = datetime.datetime.now(south_africa)
-        # print(str(sa_time))
-        
-        # https://www.reddit.com/r/BitMEX/comments/8aimm4/getting_historical_data_through_the_api_python/
-        # print("UTC: "+str(datetime.datetime.now(tz=datetime.timezone.utc)))
-        # kelowna = datetime.timezone(-timedelta(hours=8), name="Kelowna Timezone!")
-        # kelowna_td = kelowna.utcoffset(datetime.datetime.now(tz=datetime.timezone.utc))
-        # current_time = datetime.datetime.now(timezone.utc)+kelowna_td
-        # current_time = datetime.datetime.combine(current_time.date(), current_time.time(), tzinfo=kelowna)
-        # print(str(current_time))
-        # I think that works!!!!
-
-
-        #Cleaning up the above
-        datetime_utc = datetime.datetime.now(timezone.utc)
-        print("The time in "+str(datetime_utc.tzname())+" is: "+str(datetime_utc))
-
-        #Kelowna
-        timezone_kelowna = datetime.timezone(-timedelta(hours=8), name="Kelowna")
-        timedelta_kelowna = timezone_kelowna.utcoffset(datetime_utc)
-        datetime_kelowna = datetime_utc+timedelta_kelowna
-        datetime_kelowna = datetime.datetime.combine(datetime_kelowna.date(), datetime_kelowna.time(), tzinfo=timezone_kelowna)
-        print("The time in "+str(datetime_kelowna.tzname())+" is: "+str(datetime_kelowna))
-
     # Calculates the RSI for a Price List. #NOTE: Needs AT LEAST 15 records to run, which is now validated in the method.
     def calculateRSI(self, prices):
         """
@@ -369,15 +325,17 @@ class RSI_Script(object):
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
         
-        print("OUR DATETIME: "+str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)))
+        #print("OUR DATETIME: "+str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)))
         candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
         #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
         #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=datetime.timezone.utc)).result()
         #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime(year=2018, month=11, day=4, hour=12, minute=0, second=0, tzinfo=self.SELECTED_TIMEZONE)).result()
         
-        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, endTime=datetime.datetime.now()).result()
+        #//!@# New Recommendation for acquiring Candles. Note: endTime parameter with custom datetime
+        #relevant_datetime = self.my_rsi_timezone.get_current_datetime_in_timezone(selected_timezone=self.SELECTED_TIMEZONE)
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, endTime=relevant_datetime).result()
 
-        #self.help_print_prices(candles[0])#//!@#
+        self.help_print_prices(candles[0])#//!@#
         
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)

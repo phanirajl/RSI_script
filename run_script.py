@@ -13,11 +13,14 @@ def go(wait=60):
     """
     This method provides a handler for the below Python Scheduler to execute. It contains the waiting logic between cycles.
     """
+    # Instance of RSI_Timzone
+    my_rsi_timezone = RSI_Timezone()
+
     # Flag, for the desired Timezone
-    SELECTED_TIMEZONE = RSI_Timezone.TIMEZONE_KELOWNA
+    SELECTED_TIMEZONE = my_rsi_timezone.get_kelowna_timezone()
     
     # Get the start time.
-    start_time = RSI_Timezone().get_current_datetime_in_timezone(selected_timezone=SELECTED_TIMEZONE)
+    start_time = my_rsi_timezone.get_current_datetime_in_timezone(SELECTED_TIMEZONE)
     print("Start:\t\t"+str(start_time)+"\t("+str(start_time.tzname())+")")
 
     # Calculate the end time, based on the input wait
@@ -25,7 +28,7 @@ def go(wait=60):
     print("Wait:\t\t"+str(end_time)+"\t("+str(wait)+" seconds)")
     
     # Create new RSI_Script
-    my_rsi = RSI_Script(selected_timezone=SELECTED_TIMEZONE)
+    my_rsi = RSI_Script(SELECTED_TIMEZONE)
 
     # Run the RSI_Script instance. If run succeeds, it automatically stops itself.
     my_rsi.run()
@@ -34,7 +37,7 @@ def go(wait=60):
     # my_rsi.stop()
     
     # Get the time that the RSI_Script completed its work.
-    complete_time = datetime.datetime.now(SELECTED_TIMEZONE)
+    complete_time = my_rsi_timezone.get_current_datetime_in_timezone(SELECTED_TIMEZONE)
 
     # Calculate the remaining wait from the start and end datetimes (which returns a timedelta)
     remaining_wait_timedelta = end_time - complete_time
