@@ -1,7 +1,9 @@
 import bitmex
 import datetime
+from datetime import timedelta
+from datetime import timezone
 import logging
-import sched, time
+import time
 import json
 import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
 import pandas_datareader.data
@@ -16,97 +18,126 @@ import RSI_Errors
 # Extras
 from colorama import init, deinit, Fore, Back, Style
 
+# Default Timezones
+TIMEZONE_KELOWNA = timezone(-timedelta(hours=8), name="Kelowna") # GMT-8
+TIMEZONE_TORONTO = timezone(-timedelta(hours=5), name="Toronto") # GMT-5
+
 
 # Objectifying the Script
 class RSI_Script(object):
     """
     This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
     """
-    # Class Constants ("class variables")
+    
+    # Class Constants ("class variables", affect all instances of a class)
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
-
+    
     # Initialization method. Called when a new instance of the RSI_Script object is created.
-    def __init__(self):
+    def __init__(self, selected_timezone=TIMEZONE_KELOWNA):
         
+        # Reload logging module.
+        reload(logging)
+
+        # The selected timezone for the rest of the application to use.
+        #NOTE: Note the logger doesn't use this yet. Look into pytz module.
+        self.SELECTED_TIMEZONE = selected_timezone # By default, run from Kelowna time.
+        
+        # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
+        self.isAkshay = False
+
+        # Init Colorama, reset style chars after every message.
+        init(autoreset=True)
+
+        
+
+        # Initialize config as an object variable.
+        self.config = configparser.ConfigParser()
+
+        # Check which developer's settings to use. Grab key, secret, and client_test.
+        if self.isAkshay:
+            LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
+            logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+            self.config.read("my_config.ini")
+            self.key = str(self.config['Keys'].get('akshay_api_key'))
+            self.secret = str(self.config['Keys'].get('akshay_api_secret'))
+            self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False
+        else:
+            FILENAME = str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
+            LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
+            logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+            self.config.read("barrett_config.ini")
+            self.key = str(self.config['Keys'].get('barrett_api_key'))
+            self.secret = str(self.config['Keys'].get('barrett_api_secret'))
+            self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True.
+
+        # Initialize logger as an object variable as well.
+        self.logger=logging.getLogger()
+
+        # Log which Dev is using.
+        if self.isAkshay:
+            self.printl("Using Akshay's configuration: Key["+str(self.key[:6])+"]\tClient Test["+str(self.client_test)+"]", logging.DEBUG, True)
+        else:
+            self.printl("Using Barrett's configuration: Key["+str(self.key[:6])+"]\tClient Test["+str(self.client_test)+"]", logging.DEBUG, True)
+
+        # Initialize client as an object variable too.
+        try: 
+            self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
+        except Exception as e:
+            # Print an error to log, raise custom Bitmex Client error with error string.
+            self.printl("[X]    The Bitmex client failed to initialize in __init__ method.", logging.ERROR, True)
+            raise RSI_Errors.Bitmex_Client_Error(str(e))
+
+
+        # Akshay added this change for TestMex specifically.
+        self.CURRENT_POSITION=0
+
+        # Here are some important object variables that will be used in the "algorithm",
+        # and need initializing here (apparently). 
+        self.prevorderProfit=""
+        self.prevorderCover=""
+        self.orders=""
+        self.prevorderProfitPrice=0
+        self.prevorderCoverPrice=0
+        #dir(client.Quote)
+        #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+        self.listRSI=[False]*101
+        self.profitRSI=[False]*101
+              
+
+    def run(self):
+        self.printl("Running RSI_Script.", logging.DEBUG, True)
+
         # Surround main initialization in a keyboard interrupt except.
         try:
-
-            # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
-            self.isAkshay = False
-
-            # Init Colorama, reset style chars after every message.
-            init(autoreset=True)
-
-            #Reload logging module.
-            reload(logging)
-
-            # Initialize config as object variables.
-            self.config = configparser.ConfigParser()
-
-            # Check which developer's settings to use. Grab key, secret, and client_test.
-            if self.isAkshay:
-                LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
-                logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-                self.config.read("my_config.ini")
-                self.key = str(self.config['Keys'].get('akshay_api_key'))
-                self.secret = str(self.config['Keys'].get('akshay_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False
-            else:
-                FILENAME = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
-                LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
-                logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-                self.config.read("barrett_config.ini")
-                self.key = str(self.config['Keys'].get('barrett_api_key'))
-                self.secret = str(self.config['Keys'].get('barrett_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True.
-
-            # Initialize logger as an object variable as well.
-            self.logger=logging.getLogger()
-
-            # Log which Dev is using.
-            if self.isAkshay:
-                self.printl("Using Akshay's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
-            else:
-                self.printl("Using Barrett's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
-
-            # Initialize client as an object variable too. 
-            self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
-
-            # Akshay added this change for TestMex specifically.
-            self.CURRENT_POSITION=0
-
-            # Here are some important object variables that will be used in the "algorithm",
-            # and need initializing here (apparently). 
-            self.prevorderProfit=""
-            self.prevorderCover=""
-            self.orders=""
-            self.prevorderProfitPrice=0
-            self.prevorderCoverPrice=0
-            #dir(client.Quote)
-            #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            self.listRSI=[False]*101
-            self.profitRSI=[False]*101
             
-            # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
-            self.printl("Initializing the scheduler.", logging.DEBUG, True)
-            self.s = sched.scheduler(time.time, time.sleep)
-            
-            #self.s.enter(1, 1, self.algorithm)
-            # self.s.run()            
+            # Simulate work.
+            # print("[~~~~~AKSHAY's AWESOME CODE GOES HERE~~~~~~~]")
+            # time.sleep(2)
+
+            # Actually do work
+            self.algorithm()
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
             self.printl("So you wanna stop, eh? Must not like money very much...", logging.WARNING, True)
+            # Re-raise Keyboard Interrupt for run_script's try/except to handle it.
+            raise KeyboardInterrupt()
 
         except Exception as e:
             # Some other excemption has occured, and is being genericaly handled here.
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
 
         finally:
-            self.printl("Cleaning up.", True)
+            self.stop()
 
-            # De-init Colorama
-            deinit()    
+    def stop(self):
+        self.printl("Stopping RSI_Script.", logging.DEBUG, True)
+
+        # De-init Colorama
+        deinit()
+
+        # Close the log file
+        logging.shutdown()
 
     # Log and Print helper method.
     def printl(self, message, level=logging.INFO, toConsole=False):
@@ -174,8 +205,7 @@ class RSI_Script(object):
             elif http_status == 503:
                 self.printl("Bitmex Response Helper: Recieved a HTTP 503 result. "+http_reason)
                 if not silent: raise RSI_Errors.HTTP_503_Error("Bitmex Response Helper: Recieved a HTTP 503 result.", http_reason)
-
-                
+               
     # Helper to calculate the "close" values of each record in the incoming list.
     def help_collect_close_list(self, input_data):
         """
@@ -258,7 +288,7 @@ class RSI_Script(object):
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
 
-        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
+        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)
         self.printl(RSICurrent, logging.DEBUG, True)
@@ -336,7 +366,9 @@ class RSI_Script(object):
             self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
         print (self.listRSI)
         print (self.profitRSI)
-        time.sleep(40)
+        
+        # Removing the sleeping from the algorithm, placing into the run_script.
+        #time.sleep(40)
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
