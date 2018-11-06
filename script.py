@@ -1,22 +1,28 @@
+import configparser
 import bitmex
 import datetime
 from datetime import timedelta
 from datetime import timezone
-import logging
-import time
-import json
-import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
-import pandas_datareader.data
-import configparser
 from importlib import reload
+import json
+import logging
+import pandas #NOTE:MUST BE PANDAS 0.19.2 FOR THIS TO WORK
+import pandas_datareader.data
 import os
 import time
+import traceback
 
 # Import RSI Errors
 import RSI_Errors
+from RSI_Timezone_Helper import RSI_Timezone
 
 # Extras
 from colorama import init, deinit, Fore, Back, Style
+
+#Experimental
+from django.core.serializers.json import DjangoJSONEncoder #https://stackoverflow.com/a/11875813
+#import pytz
+#from pytz import timezone as pytztimezone
 
 # Default Timezones
 TIMEZONE_KELOWNA = timezone(-timedelta(hours=8), name="Kelowna") # GMT-8
@@ -114,8 +120,12 @@ class RSI_Script(object):
             # print("[~~~~~AKSHAY's AWESOME CODE GOES HERE~~~~~~~]")
             # time.sleep(2)
 
-            # Actually do work
+            #Try to learn something about timezones....
+            self.time_zone_test()
+            
+            # Run the algorithm: the real work.
             self.algorithm()
+
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -126,6 +136,7 @@ class RSI_Script(object):
         except Exception as e:
             # Some other excemption has occured, and is being genericaly handled here.
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
+            self.printl(str(traceback.print_exc(e)), logging.ERROR, True) # Decoration not applied.
 
         finally:
             self.stop()
@@ -152,7 +163,7 @@ class RSI_Script(object):
         """
         if level == logging.INFO: # Normal
             self.logger.info(message) 
-            if toConsole: print(Style.NORMAL + message)
+            if toConsole: print(Style.NORMAL + Fore.GREEN + message)
         elif level == logging.DEBUG: # Cyan, Dim
             self.logger.debug(message)
             if toConsole: print(Style.DIM + Fore.CYAN + message)
@@ -238,7 +249,66 @@ class RSI_Script(object):
         #Return the list of 'close' prices
         return close_list
 
-    #needs AT LEAST 15 records to run
+    # Helper to print out the price data
+    def help_print_prices(self, prices):
+        # Validate prices input: List & len >= 15
+        if type(prices) is not list:
+            self.printl("Error: parameter 'prices' must be a List, not a "+str(type(prices))+".", logging.ERROR, True)
+            raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
+
+        # Iterate through all records, json string dumping all key, values. 
+        self.printl("++ PRINTING PRICES:", logging.info, True)
+        for record in prices:
+            #NOTE: The use of cls=DjangoJSONEncoder to handle object serialization failures using the Django stategy.
+            string_record = json.dumps(record, indent=4, cls=DjangoJSONEncoder)
+            self.printl(string_record, logging.INFO, True)
+
+        # Check incoming prices List for the minimum length of required data.
+        self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        if not len(prices)>=15:
+            self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
+            raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
+
+    def time_zone_test(self):
+        #print(pytz.country_names['ca'])
+        #print(' '.join(pytz.country_timezones['ca']))
+
+        # THIS IS INCORRECT!
+        # utc = pytz.utc
+        # utc.zone
+        # kelowna = pytztimezone("America/Vancouver")
+        # toronto = pytztimezone("America/Toronto")
+        # local_kelowna = kelowna.localize(datetime.datetime.utcnow())
+        # local_toronto = toronto.localize(datetime.datetime.utcnow())
+        # print("Kelowna: "+str(local_kelowna))
+        # print("Toronto: "+str(local_toronto))
+
+        # south_africa = pytztimezone('America/Toronto')
+        # sa_time = datetime.datetime.now(south_africa)
+        # print(str(sa_time))
+        
+        # https://www.reddit.com/r/BitMEX/comments/8aimm4/getting_historical_data_through_the_api_python/
+        # print("UTC: "+str(datetime.datetime.now(tz=datetime.timezone.utc)))
+        # kelowna = datetime.timezone(-timedelta(hours=8), name="Kelowna Timezone!")
+        # kelowna_td = kelowna.utcoffset(datetime.datetime.now(tz=datetime.timezone.utc))
+        # current_time = datetime.datetime.now(timezone.utc)+kelowna_td
+        # current_time = datetime.datetime.combine(current_time.date(), current_time.time(), tzinfo=kelowna)
+        # print(str(current_time))
+        # I think that works!!!!
+
+
+        #Cleaning up the above
+        datetime_utc = datetime.datetime.now(timezone.utc)
+        print("The time in "+str(datetime_utc.tzname())+" is: "+str(datetime_utc))
+
+        #Kelowna
+        timezone_kelowna = datetime.timezone(-timedelta(hours=8), name="Kelowna")
+        timedelta_kelowna = timezone_kelowna.utcoffset(datetime_utc)
+        datetime_kelowna = datetime_utc+timedelta_kelowna
+        datetime_kelowna = datetime.datetime.combine(datetime_kelowna.date(), datetime_kelowna.time(), tzinfo=timezone_kelowna)
+        print("The time in "+str(datetime_kelowna.tzname())+" is: "+str(datetime_kelowna))
+
+    # Calculates the RSI for a Price List. #NOTE: Needs AT LEAST 15 records to run, which is now validated in the method.
     def calculateRSI(self, prices):
         """
         Method to calculate the RSI of a input set of prices.
@@ -246,6 +316,17 @@ class RSI_Script(object):
         Attributes:
             prices -- These are the prices to calcualte the RSI from. Data type must be an "array-like", dict, or scalar value, according to the "pandas.Series" method's 'data' parameter.
         """
+        # Validate prices input: List & len >= 15
+        if type(prices) is not list:
+            self.printl("Error: parameter 'prices' must be a List, not a "+str(type(prices))+".", logging.ERROR, True)
+            raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
+
+        # Check incoming prices List for the minimum length of required data.
+        self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        if not len(prices)>=15:
+            self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
+            raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
+        
         close=pandas.Series(prices)
 
         window_length = 14
@@ -287,13 +368,21 @@ class RSI_Script(object):
         """
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
+        
+        print("OUR DATETIME: "+str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)))
+        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=datetime.timezone.utc)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime(year=2018, month=11, day=4, hour=12, minute=0, second=0, tzinfo=self.SELECTED_TIMEZONE)).result()
+        
+        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, endTime=datetime.datetime.now()).result()
 
-        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #self.help_print_prices(candles[0])#//!@#
+        
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)
-        self.printl(RSICurrent, logging.DEBUG, True)
-        print(RSICurrent)
-        print (prices[-1])
+        self.printl("RSICurrent: "+str(RSICurrent), logging.INFO, True)
+        self.printl("prices[-1]: "+str(prices[-1]), logging.INFO, True)
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
@@ -307,7 +396,7 @@ class RSI_Script(object):
                 self.orders=result[0]['orderID']
             
             self.listRSI[roundedRSI]=True
-            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
+            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
 
         #Shorting high RSI
         if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
@@ -319,7 +408,7 @@ class RSI_Script(object):
             else:
                 self.orders=result[0]['orderID']
             self.listRSI[roundedRSI]=True
-            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
+            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
 
         #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
         ##################################################TAKING PROFITS BELOW##################################################################
@@ -336,7 +425,7 @@ class RSI_Script(object):
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderProfit and self.prevorderProfitPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
-                #self.printl("Cancelled existing order for taking profit", logging.DEBUG, True)
+                #self.printl("Cancelled existing order for taking profit", logging.INFO, True)
             self.prevorderProfit=result[0]['orderID']
             self.prevorderProfitPrice=price
             self.profitRSI[roundedRSI]=True
@@ -350,7 +439,7 @@ class RSI_Script(object):
                 self.printl("Cancelled existing orders", logging.DEBUG, True)
             self.listRSI=[False]*101
             self.profitRSI=[False]*101
-            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.DEBUG, True)
+            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.INFO, True)
 
         #covering a short position
         if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
@@ -363,9 +452,9 @@ class RSI_Script(object):
             self.prevorderCover=result[0]['orderID']
             self.prevorderCoverPrice=price
             self.profitRSI[roundedRSI]=True
-            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
-        print (self.listRSI)
-        print (self.profitRSI)
+            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
+        self.printl("self.listRSI: "+str(self.listRSI), logging.INFO, True)
+        self.printl("self.profitRSI: "+str(self.profitRSI), logging.INFO, True)
         
         # Removing the sleeping from the algorithm, placing into the run_script.
         #time.sleep(40)

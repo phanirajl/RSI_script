@@ -6,18 +6,18 @@ import sched
 import time
 
 from script import RSI_Script
-
-# Default Timezones
-TIMEZONE_KELOWNA = timezone(-timedelta(hours=8), name="Kelowna") # GMT-8
-TIMEZONE_TORONTO = timezone(-timedelta(hours=5), name="Toronto") # GMT-5
+from RSI_Timezone_Helper import RSI_Timezone
 
 # Method for the scheduler to run 
 def go(wait=60):
     """
     This method provides a handler for the below Python Scheduler to execute. It contains the waiting logic between cycles.
-    """    
+    """
+    # Flag, for the desired Timezone
+    SELECTED_TIMEZONE = RSI_Timezone.TIMEZONE_KELOWNA
+    
     # Get the start time.
-    start_time = datetime.datetime.now(TIMEZONE_KELOWNA)
+    start_time = RSI_Timezone().get_current_datetime_in_timezone(selected_timezone=SELECTED_TIMEZONE)
     print("Start:\t\t"+str(start_time)+"\t("+str(start_time.tzname())+")")
 
     # Calculate the end time, based on the input wait
@@ -25,7 +25,7 @@ def go(wait=60):
     print("Wait:\t\t"+str(end_time)+"\t("+str(wait)+" seconds)")
     
     # Create new RSI_Script
-    my_rsi = RSI_Script()
+    my_rsi = RSI_Script(selected_timezone=SELECTED_TIMEZONE)
 
     # Run the RSI_Script instance. If run succeeds, it automatically stops itself.
     my_rsi.run()
@@ -34,7 +34,7 @@ def go(wait=60):
     # my_rsi.stop()
     
     # Get the time that the RSI_Script completed its work.
-    complete_time = datetime.datetime.now(TIMEZONE_KELOWNA)
+    complete_time = datetime.datetime.now(SELECTED_TIMEZONE)
 
     # Calculate the remaining wait from the start and end datetimes (which returns a timedelta)
     remaining_wait_timedelta = end_time - complete_time

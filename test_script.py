@@ -71,6 +71,20 @@ class TestRSIScriptMethods(unittest.TestCase):
         print("rsi: "+str(test_result))
         self.assertEqual(test_result, 84.31903258988926)
 
+    @unittest.expectedFailure
+    def test_error_prices_dict(self):
+        print("\t- Testing Error: 'prices' is Dict not List.")
+        test_input = {{"close": "10.50" }}
+        with self.assertRaises(ValueError):
+            test_result = self.my_rsi.help_collect_close_list(test_input)
+
+    @unittest.expectedFailure
+    def test_error_prices_length_tto_small(self):
+        print("\t- Testing Error: 'prices' length < 15 .")
+        test_input = [{"close": "10.50" },{"close": "10.50" },{"close": "10.50" }]
+        with self.assertRaises(ValueError):
+            test_result = self.my_rsi.help_collect_close_list(test_input)
+
     # ...
 
     #---------------------
@@ -137,9 +151,15 @@ class TestRSIScriptMethods(unittest.TestCase):
 
 
     def tearDown(self):
+        # Stop the RSI_Script, and allow it to clean up.
+        self.my_rsi.stop()
+
         # Delete the Helper class, result data, and input data
         self.my_rsi = None
 
+#----------------------------------
+# Main Method, to run the unittest
+#----------------------------------
 if __name__ == '__main__':
     print("> Beginning Unit Testing.")
     unittest.main()
