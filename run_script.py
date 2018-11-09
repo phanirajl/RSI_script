@@ -8,7 +8,7 @@ import time
 from script import RSI_Script
 from RSI_Timezone_Helper import RSI_Timezone
 
-# Method for the scheduler to run 
+# A method created to be run by the Python Scheduler below.
 def go(wait=60):
     """
     This method provides a handler for the below Python Scheduler to execute. It contains the waiting logic between cycles.
@@ -32,9 +32,6 @@ def go(wait=60):
 
     # Run the RSI_Script instance. If run succeeds, it automatically stops itself.
     my_rsi.run()
-
-    # Stop the RSI_Script instance.
-    # my_rsi.stop()
     
     # Get the time that the RSI_Script completed its work.
     complete_time = my_rsi_timezone.get_current_datetime_in_timezone(SELECTED_TIMEZONE)

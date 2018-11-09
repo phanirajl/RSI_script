@@ -241,25 +241,28 @@ class RSI_Script(object):
             self.printl("Error: parameter 'input_data' list is empty.", logging.ERROR, True)
             raise ValueError("parameter 'input_data' list is empty.")
 
+        # for item in close_list:
+        #     print(str(item))
+        
         #Return the list of 'close' prices
         return close_list
 
     # Helper to print out the price data
-    def help_print_prices(self, prices):
+    def help_print_prices(self, prices, toConsole=True):
         # Validate prices input: List & len >= 15
         if type(prices) is not list:
             self.printl("Error: parameter 'prices' must be a List, not a "+str(type(prices))+".", logging.ERROR, True)
             raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
 
         # Iterate through all records, json string dumping all key, values. 
-        self.printl("++ PRINTING PRICES:", logging.info, True)
+        self.printl("++ PRINTING PRICES:", logging.info, toConsole)
         for record in prices:
             #NOTE: The use of cls=DjangoJSONEncoder to handle object serialization failures using the Django stategy.
             string_record = json.dumps(record, indent=4, cls=DjangoJSONEncoder)
-            self.printl(string_record, logging.INFO, True)
+            self.printl(string_record, logging.INFO, toConsole)
 
         # Check incoming prices List for the minimum length of required data.
-        self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        #self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
         if not len(prices)>=15:
             self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
             raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
@@ -326,16 +329,34 @@ class RSI_Script(object):
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
         
         #print("OUR DATETIME: "+str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)))
-        candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
-        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
-        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now(tz=datetime.timezone.utc)).result()
-        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime(year=2018, month=11, day=4, hour=12, minute=0, second=0, tzinfo=self.SELECTED_TIMEZONE)).result()
-        
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=80, partial=True, startTime=datetime.datetime.now()).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime.now(tz=datetime.timezone.utc)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime(year=2018, month=11, day=4, hour=12, minute=0, second=0, tzinfo=self.SELECTED_TIMEZONE)).result()
         #//!@# New Recommendation for acquiring Candles. Note: endTime parameter with custom datetime
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=datetime.datetime.now()).result()
         #relevant_datetime = self.my_rsi_timezone.get_current_datetime_in_timezone(selected_timezone=self.SELECTED_TIMEZONE)
-        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, endTime=relevant_datetime).result()
+        #print("Our relevant datatime is: "+str(relevant_datetime))
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=relevant_datetime).result()
 
-        self.help_print_prices(candles[0])#//!@#
+        # Check the selected timezone, and pick the correct timedelta offset.
+        if self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Kelowna":
+            self.printl("Algorithm using the Kelowna timezone.", logging.DEBUG, True)
+            #self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.SELECTED_OFFSET = -timedelta(hours=0)
+        elif self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Toronto":
+            self.printl("Algorithm using the Toronto timezone.", logging.DEBUG, True)
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_TORONTO
+        else:
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.printl("Algorithm defaulting to Kelowna timezone due to unrecognized timezone.", logging.DEBUG, True)
+        
+        # Get the correct candles, using the above set SELECTED OFFSET.
+        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()-self.SELECTED_OFFSET).result()
+        
+        # Helper to print out the candles, log only.
+        self.help_print_prices(candles[0], False)
         
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)

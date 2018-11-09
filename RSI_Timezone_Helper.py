@@ -10,8 +10,15 @@ class RSI_Timezone(object):
     This class is meant to abstract the timezone concerns away from the regular RSI code
     """
 
+    # Timezones
     TIMEZONE_KELOWNA = timezone(-timedelta(hours=8), name="Kelowna")
     TIMEZONE_TORONTO = timezone(-timedelta(hours=5), name="Toronto")
+
+    # Timedeltas
+    #NOTE: These strange values were measured in both timezones, and deemed to be correct. Just putting them here, and not asking questions.
+    TIMEDELTA_KELOWNA = -timedelta(hours=12)
+    TIMEDELTA_TORONTO = -timedelta(hours=8)
+    
 
     def __init__(self):
         pass
@@ -62,7 +69,7 @@ class RSI_Timezone(object):
 
 #--------------------WIP---------------------
 
-     # WIP Method to fetch one of the timezones from the dict
+     # WIP, Method to fetch one of the timezones from the dict
     def get_timezone(self, selected_timezone):
         
         # Attmept to get the value from the dict
@@ -77,7 +84,7 @@ class RSI_Timezone(object):
 
         return returned_timezone
 
-    # Just a test method. Will delete later.
+    # WIP, Just a test method. Will delete later.
     def time_zone_test(self):
         # https://www.reddit.com/r/BitMEX/comments/8aimm4/getting_historical_data_through_the_api_python/
         # print("UTC: "+str(datetime.datetime.now(tz=datetime.timezone.utc)))
@@ -99,6 +106,7 @@ class RSI_Timezone(object):
         datetime_kelowna = datetime.datetime.combine(datetime_kelowna.date(), datetime_kelowna.time(), tzinfo=timezone_kelowna)
         print("The time in "+str(datetime_kelowna.tzname())+" is: "+str(datetime_kelowna))
     
+    # WIP, Just a test method. Will delete later.
     def time_zone_test2(self):
         test = self.get_timezone("Kelowna")
         print(str(type(test)))
