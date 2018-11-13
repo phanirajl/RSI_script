@@ -47,7 +47,7 @@ class RSI_Script(object):
         self.SELECTED_TIMEZONE = selected_timezone
         
         # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
-        self.isAkshay = False
+        self.isAkshay = True
 
         # Init Colorama, reset style chars after every message.
         init(autoreset=True)
@@ -58,34 +58,19 @@ class RSI_Script(object):
         self.config = configparser.ConfigParser()
 
         # Check which developer's settings to use. Grab key, secret, and client_test.
-        if self.isAkshay:
-            LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
-            logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-            self.config.read("my_config.ini")
-            self.key = str(self.config['Keys'].get('akshay_api_key'))
-            self.secret = str(self.config['Keys'].get('akshay_api_secret'))
-            self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False
-        else:
-            FILENAME = str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
-            LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
-            logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-            self.config.read("barrett_config.ini")
-            self.key = str(self.config['Keys'].get('barrett_api_key'))
-            self.secret = str(self.config['Keys'].get('barrett_api_secret'))
-            self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True.
 
-        # Initialize logger as an object variable as well.
+        LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
+        logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+
+        self.key = "WEvbIq1kwfl3r0utSjTiSJwR"
+        self.secret = "k35qBUMz0pqti-aM-0Chw130VCWQOqbe4etuX91hQVh9TKc_"
+
         self.logger=logging.getLogger()
 
-        # Log which Dev is using.
-        if self.isAkshay:
-            self.printl("Using Akshay's configuration: Key["+str(self.key[:6])+"]\tClient Test["+str(self.client_test)+"]", logging.DEBUG, True)
-        else:
-            self.printl("Using Barrett's configuration: Key["+str(self.key[:6])+"]\tClient Test["+str(self.client_test)+"]", logging.DEBUG, True)
 
-        # Initialize client as an object variable too.
+
         try: 
-            self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
+            self.client = bitmex.bitmex(api_key=self.key, api_secret=self.secret)
         except Exception as e:
             # Print an error to log, raise custom Bitmex Client error with error string.
             self.printl("[X]    The Bitmex client failed to initialize in __init__ method.", logging.ERROR, True)
@@ -139,7 +124,7 @@ class RSI_Script(object):
         self.printl("Stopping RSI_Script.", logging.DEBUG, True)
 
         # De-init Colorama
-        deinit()
+        #deinit()
 
         # Close the log file
         logging.shutdown()
@@ -365,12 +350,12 @@ class RSI_Script(object):
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI<=25 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI<=45 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
-            if self.listRSI:
-                self.listRSI=self.listRSI+","+result[0]['orderID']
+            if self.orders:
+                self.orders=self.orders+","+result[0]['orderID']
             else:
                 self.orders=result[0]['orderID']
             
@@ -378,7 +363,7 @@ class RSI_Script(object):
             self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
 
         #Shorting high RSI
-        if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI>=55 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
@@ -410,15 +395,15 @@ class RSI_Script(object):
             self.profitRSI[roundedRSI]=True
             self.printl("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
 
-        #cleaning up orders and position arrays
-        if(roundedRSI>40 and roundedRSI<60 and quantity==0):
-            if self.orders:
-                self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
-                self.orders=""
-                self.printl("Cancelled existing orders", logging.DEBUG, True)
-            self.listRSI=[False]*101
-            self.profitRSI=[False]*101
-            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.INFO, True)
+        # #cleaning up orders and position arrays
+        # if(roundedRSI>40 and roundedRSI<60 and quantity==0):
+        #     if self.orders:
+        #         self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
+        #         self.orders=""
+        #         self.printl("Cancelled existing orders", logging.DEBUG, True)
+        #     self.listRSI=[False]*101
+        #     self.profitRSI=[False]*101
+        #     self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.INFO, True)
 
         #covering a short position
         if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
