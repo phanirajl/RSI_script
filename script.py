@@ -106,7 +106,7 @@ class RSI_Script(object):
               
 
     def run(self):
-        self.printl("Running RSI_Script.", logging.DEBUG, True)
+        #self.printl("Running RSI_Script.", logging.DEBUG, True)
 
         # Surround main initialization in a keyboard interrupt except.
         try:
@@ -129,8 +129,8 @@ class RSI_Script(object):
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
             self.printl(str(traceback.print_exc(e)), logging.ERROR, True) # Decoration not applied.
 
-        finally:
-            self.stop()
+        #finally:
+            #self.stop()
 
     def stop(self):
         self.printl("Stopping RSI_Script.", logging.DEBUG, True)
@@ -348,11 +348,11 @@ class RSI_Script(object):
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)
         self.printl("RSICurrent: "+str(RSICurrent), logging.INFO, True)
-        self.printl("prices[-1]: "+str(prices[-1]), logging.INFO, True)
+        self.printl("price: "+str(prices[-1]), logging.INFO, True)
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI<=35 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI<=45 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
@@ -362,10 +362,10 @@ class RSI_Script(object):
                 self.orders=result[0]['orderID']
             
             self.listRSI[roundedRSI]=True
-            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
+            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #Shorting high RSI
-        if (roundedRSI>=65 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI>=55 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
@@ -374,7 +374,7 @@ class RSI_Script(object):
             else:
                 self.orders=result[0]['orderID']
             self.listRSI[roundedRSI]=True
-            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
+            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
         ##################################################TAKING PROFITS BELOW##################################################################
@@ -395,17 +395,17 @@ class RSI_Script(object):
             self.prevorderProfit=result[0]['orderID']
             self.prevorderProfitPrice=price
             self.profitRSI[roundedRSI]=True
-            self.printl("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.DEBUG, True)
+            self.printl("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
-        # #cleaning up orders and position arrays
-        # if(roundedRSI>40 and roundedRSI<60 and quantity==0):
-        #     if self.orders:
-        #         self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
-        #         self.orders=""
-        #         self.printl("Cancelled existing orders", logging.DEBUG, True)
-        #     self.listRSI=[False]*101
-        #     self.profitRSI=[False]*101
-        #     self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.INFO, True)
+        #cleaning up orders and position arrays
+        if(roundedRSI>40 and roundedRSI<60 and quantity==0):
+            if self.orders:
+                self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
+                self.orders=""
+                self.printl("Cancelled existing orders", logging.DEBUG, True)
+            self.listRSI=[False]*101
+            self.profitRSI=[False]*101
+            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #covering a short position
         if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
@@ -418,9 +418,9 @@ class RSI_Script(object):
             self.prevorderCover=result[0]['orderID']
             self.prevorderCoverPrice=price
             self.profitRSI[roundedRSI]=True
-            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.INFO, True)
-        self.printl("self.listRSI: "+str(self.listRSI), logging.INFO, True)
-        self.printl("self.profitRSI: "+str(self.profitRSI), logging.INFO, True)
+            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
+        print("self.listRSI: "+str(self.listRSI))
+        print("self.profitRSI: "+str(self.profitRSI))
         
         # Removing the sleeping from the algorithm, placing into the run_script.
         #time.sleep(40)
