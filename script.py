@@ -76,6 +76,18 @@ class RSI_Script(object):
             self.printl("[X]    The Bitmex client failed to initialize in __init__ method.", logging.ERROR, True)
             raise RSI_Errors.Bitmex_Client_Error(str(e))
 
+                # Check the selected timezone, and pick the correct timedelta offset.
+        if self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Kelowna":
+            self.printl("Algorithm using the Kelowna timezone.", logging.DEBUG, True)
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.SELECTED_OFFSET = -timedelta(hours=0)
+        elif self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Toronto":
+            self.printl("Algorithm using the Toronto timezone.", logging.DEBUG, True)
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_TORONTO
+        else:
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.printl("Algorithm defaulting to Kelowna timezone due to unrecognized timezone.", logging.DEBUG, True)
+
 
         # Akshay added this change for TestMex specifically.
         self.CURRENT_POSITION=0
@@ -266,7 +278,7 @@ class RSI_Script(object):
             raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
 
         # Check incoming prices List for the minimum length of required data.
-        self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        #self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
         if not len(prices)>=15:
             self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
             raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
@@ -325,23 +337,13 @@ class RSI_Script(object):
         #print("Our relevant datatime is: "+str(relevant_datetime))
         #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=relevant_datetime).result()
 
-        # Check the selected timezone, and pick the correct timedelta offset.
-        if self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Kelowna":
-            self.printl("Algorithm using the Kelowna timezone.", logging.DEBUG, True)
-            #self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
-            self.SELECTED_OFFSET = -timedelta(hours=0)
-        elif self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Toronto":
-            self.printl("Algorithm using the Toronto timezone.", logging.DEBUG, True)
-            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_TORONTO
-        else:
-            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
-            self.printl("Algorithm defaulting to Kelowna timezone due to unrecognized timezone.", logging.DEBUG, True)
+
         
         # Get the correct candles, using the above set SELECTED OFFSET.
         candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()-self.SELECTED_OFFSET).result()
         
         # Helper to print out the candles, log only.
-        self.help_print_prices(candles[0], False)
+        #self.help_print_prices(candles[0], False)
         
         prices=self.help_collect_close_list(candles[0])
         RSICurrent=self.calculateRSI(prices)
