@@ -352,7 +352,7 @@ class RSI_Script(object):
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI<=45 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI<=35 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
@@ -365,7 +365,7 @@ class RSI_Script(object):
             self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #Shorting high RSI
-        if (roundedRSI>=55 and self.listRSI[roundedRSI]==False):
+        if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
             level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
             result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()

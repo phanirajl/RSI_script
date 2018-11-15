@@ -59,18 +59,21 @@ print("Initializing the Python Scheduler.")
 s = sched.scheduler(time.time, time.sleep)
 
 # Surround the loop with a keyboard interrrupt to fail gracefully
-try:
-    # Forever and ever and ever and ever....
-    while True:
-        
-        # Get the event created by immediately scheduling a run of the above "go" method.
-        # NOTE: The 30 seconds wait here is just an example...you can change it to whatever you want. Ideally 60, so you know your code runs exactly every minute, or however quick it can over 60 seconds.
+run=True
+while run==True:
+    try:   
+
         e = s.enter(0, 1, go(30))
         # print("Queue: "+str(s.queue))
 
         # Remove the above event from the Schedule queue, so we don't have a massive queue sucking up memory over long periods of time.
         s.cancel(e)
+    except KeyboardInterrupt:
+        run=False
+        my_rsi.stop()
+        print("So long, and thanks for all the fish!.")
+    except Exception as e:
+        time.sleep(1)
+        print ("Hey we caught a general exception")
 
-except KeyboardInterrupt:
-    print("So long, and thanks for all the fish!.")
   
