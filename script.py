@@ -1,115 +1,147 @@
+import configparser
 import bitmex
 import datetime
-import logging
-import sched, time
-import json
-import pandas # MUST BE PANDAS 0.19.2 FOR THIS TO WORK
-import pandas_datareader.data
-import configparser
+from datetime import timedelta
+from datetime import timezone
 from importlib import reload
+import json
+import logging
+import pandas #NOTE:MUST BE PANDAS 0.19.2 FOR THIS TO WORK
+import pandas_datareader.data
 import os
 import time
+import traceback
 
 # Import RSI Errors
 import RSI_Errors
+from RSI_Timezone_Helper import RSI_Timezone
 
 # Extras
 from colorama import init, deinit, Fore, Back, Style
 
+#Experimental
+from django.core.serializers.json import DjangoJSONEncoder #https://stackoverflow.com/a/11875813
+#import pytz
+#from pytz import timezone as pytztimezone
 
 # Objectifying the Script
 class RSI_Script(object):
-"""
-This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
-"""
-
-    # Class Constants ("class variables")
+    """
+    This is the object that encompasses the trading logic itself. It can be instantiated with "from script import RSI_Script".
+    """
+    
+    # Class Constants ("class variables", affect all instances of a class)
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
-
+    
     # Initialization method. Called when a new instance of the RSI_Script object is created.
-    def __init__(self):
+    def __init__(self, selected_timezone):
         
+        # Reload logging module.
+        reload(logging)
+
+        # Instance of RSI_Timezone
+        self.my_rsi_timezone = RSI_Timezone()
+
+        # The selected timezone for the rest of the application to use.
+        #NOTE: Note the logger doesn't use this yet.
+        self.SELECTED_TIMEZONE = selected_timezone
+        
+        # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
+        self.isAkshay = True
+
+        # Init Colorama, reset style chars after every message.
+        init(autoreset=True)
+
+        
+
+        # Initialize config as an object variable.
+        self.config = configparser.ConfigParser()
+
+        # Check which developer's settings to use. Grab key, secret, and client_test.
+
+        LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
+        logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
+
+        self.key = "WEvbIq1kwfl3r0utSjTiSJwR"
+        self.secret = "k35qBUMz0pqti-aM-0Chw130VCWQOqbe4etuX91hQVh9TKc_"
+
+        self.logger=logging.getLogger()
+
+
+
+        try: 
+            self.client = bitmex.bitmex(api_key=self.key, api_secret=self.secret)
+        except Exception as e:
+            # Print an error to log, raise custom Bitmex Client error with error string.
+            self.printl("[X]    The Bitmex client failed to initialize in __init__ method.", logging.ERROR, True)
+            raise RSI_Errors.Bitmex_Client_Error(str(e))
+
+                # Check the selected timezone, and pick the correct timedelta offset.
+        if self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Kelowna":
+            self.printl("Algorithm using the Kelowna timezone.", logging.DEBUG, True)
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.SELECTED_OFFSET = -timedelta(hours=0)
+        elif self.my_rsi_timezone.get_current_datetime_in_timezone(self.SELECTED_TIMEZONE).tzname() == "Toronto":
+            self.printl("Algorithm using the Toronto timezone.", logging.DEBUG, True)
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_TORONTO
+        else:
+            self.SELECTED_OFFSET = RSI_Timezone.TIMEDELTA_KELOWNA
+            self.printl("Algorithm defaulting to Kelowna timezone due to unrecognized timezone.", logging.DEBUG, True)
+
+
+        # Akshay added this change for TestMex specifically.
+        self.CURRENT_POSITION=0
+
+        # Here are some important object variables that will be used in the "algorithm",
+        # and need initializing here (apparently). 
+        self.prevorderProfit=""
+        self.prevorderCover=""
+        self.orders=""
+        self.prevorderProfitPrice=0
+        self.prevorderCoverPrice=0
+        #dir(client.Quote)
+        #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+        self.listRSI=[False]*101
+        self.profitRSI=[False]*101
+              
+
+    def run(self):
+        #self.printl("Running RSI_Script.", logging.DEBUG, True)
+
         # Surround main initialization in a keyboard interrupt except.
         try:
-
-            # Flag determining if current user is Akshay or Barrett? Use appropriate files/settings for each.
-            self.isAkshay = False
-
-            # Init Colorama, reset style chars after every message.
-            init(autoreset=True)
-
-            #Reload logging module.
-            reload(logging)
-
-            # Initialize config as object variables.
-            self.config = configparser.ConfigParser()
-
-            # Check which developer's settings to use. Grab key, secret, and client_test.
-            if self.isAkshay:
-                logging.basicConfig(filename='C:\\Users\\micha_000\\Documents\\BitMexBot\example.log',level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-                self.config.read("my_config.ini")
-                self.key = str(self.config['Keys'].get('akshay_api_key'))
-                self.secret = str(self.config['Keys'].get('akshay_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'False')) # Akshay's default will be test=False
-            else:
-                FILENAME = str(datetime.datetime.now()).replace(":","-").replace(".","_").replace(",","_").replace(" ","_")[:-7] #cheap hack, will fix later
-                LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", FILENAME+".log"))
-                #LOG_DESTINATION = os.path.join("C:\\Users\\Barrett\\Documents\\SmartGit\\Akshay\\RSI_script\\logs",FILENAME+".log")
-                logging.basicConfig(filename=LOG_DESTINATION, level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
-                self.config.read("barrett_config.ini")
-                self.key = str(self.config['Keys'].get('barrett_api_key'))
-                self.secret = str(self.config['Keys'].get('barrett_api_secret'))
-                self.client_test = bool(self.config['Keys'].get('client_test', 'True')) # Barrett's default will be test=True.
-
-            # Initialize logger as an object variable as well.
-            self.logger=logging.getLogger()
-
-            # Log which Dev is using.
-            if self.isAkshay:
-                self.printl("Using Akshay's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
-            else:
-                self.printl("Using Barrett's configuration: Key "+str(self.key[:6])+" Client Test: "+str(self.client_test), logging.DEBUG, True)
-
-            # Initialize client as an object variable too. 
-            self.client = bitmex.bitmex(test=self.client_test ,api_key=self.key, api_secret=self.secret)
-
-            # Akshay added this change for TestMex specifically.
-            self.CURRENT_POSITION=0
-
-            # Here are some important object variables that will be used in the "algorithm",
-            # and need initializing here (apparently). 
-            self.prevorderProfit=""
-            self.prevorderCover=""
-            self.orders=""
-            self.prevorderProfitPrice=0
-            self.prevorderCoverPrice=0
-            #dir(client.Quote)
-            #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            self.listRSI=[False]*101
-            self.profitRSI=[False]*101
             
-            # Initalize Scheduler, schedule a trip to the "algorithm" in a sec, and then run it!
-            self.printl("Initializing the scheduler.", logging.DEBUG, True)
-            self.s = sched.scheduler(time.time, time.sleep)
-            
-            #self.s.enter(1, 1, self.algorithm)
-            # self.s.run()            
+            # Simulate work.
+            # print("[~~~~~AKSHAY's AWESOME CODE GOES HERE~~~~~~~]")
+            # time.sleep(2)
+
+            # Run the algorithm: the real work.
+            self.algorithm()
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
             self.printl("So you wanna stop, eh? Must not like money very much...", logging.WARNING, True)
+            # Re-raise Keyboard Interrupt for run_script's try/except to handle it.
+            raise KeyboardInterrupt()
 
         except Exception as e:
             # Some other excemption has occured, and is being genericaly handled here.
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
+            self.printl(str(traceback.print_exc(e)), logging.ERROR, True) # Decoration not applied.
 
-        finally:
-            self.printl("Cleaning up.", True)
-            self.dummy()
-            # De-init Colorama
-            deinit()    
+        #finally:
+            #self.stop()
 
-    # Log and Print helper method
+    def stop(self):
+        self.printl("Stopping RSI_Script.", logging.DEBUG, True)
+
+        # De-init Colorama
+        #deinit()
+
+        # Close the log file
+        logging.shutdown()
+
+    # Log and Print helper method.
     def printl(self, message, level=logging.INFO, toConsole=False):
         """
         This method is a helper to be able to write information to both the 'console' AND 
@@ -118,11 +150,12 @@ This is the object that encompasses the trading logic itself. It can be instanti
         
         Attributes:
             message -- This is the text to be shown.
-            //!@#resume
+            level -- This is the logging level to use. Must be a constant of the logging class.
+            toConsole -- This boolean flag describes if you want the message to be printed to the console in addition to the log file.
         """
         if level == logging.INFO: # Normal
             self.logger.info(message) 
-            if toConsole: print(Style.NORMAL + message)
+            if toConsole: print(Style.NORMAL + Fore.GREEN + message)
         elif level == logging.DEBUG: # Cyan, Dim
             self.logger.debug(message)
             if toConsole: print(Style.DIM + Fore.CYAN + message)
@@ -133,7 +166,7 @@ This is the object that encompasses the trading logic itself. It can be instanti
             self.logger.warning(message)
             if toConsole: print(Style.NORMAL + Fore.YELLOW + message)           
 
-    # Helper
+    # Helper to raise custom exceptions in Bitmex response objects.
     def bitmex_response_helper(self, response_object, silent=False):
         """
         This method is used to read the response from the Bitmex client, and look at the status
@@ -163,7 +196,7 @@ This is the object that encompasses the trading logic itself. It can be instanti
         else:
             # We have a non-success. Grab relevant information
             http_reason = response_object[1].reason
-            http_headers = response_object[1].headers
+            #http_headers = response_object[1].headers #header can be used if needed in future.
 
             # Without silence, we throw an error
             if http_status == 400:
@@ -175,9 +208,8 @@ This is the object that encompasses the trading logic itself. It can be instanti
             elif http_status == 503:
                 self.printl("Bitmex Response Helper: Recieved a HTTP 503 result. "+http_reason)
                 if not silent: raise RSI_Errors.HTTP_503_Error("Bitmex Response Helper: Recieved a HTTP 503 result.", http_reason)
-
-                
-    # Helper to calculate the "close" values of each record in the incoming list
+               
+    # Helper to calculate the "close" values of each record in the incoming list.
     def help_collect_close_list(self, input_data):
         """
         Helper method, in order to isolate the "close" values of each record in the incoming list.
@@ -206,16 +238,55 @@ This is the object that encompasses the trading logic itself. It can be instanti
             self.printl("Error: parameter 'input_data' list is empty.", logging.ERROR, True)
             raise ValueError("parameter 'input_data' list is empty.")
 
+        # for item in close_list:
+        #     print(str(item))
+        
         #Return the list of 'close' prices
         return close_list
 
-    #needs AT LEAST 15 records to run
+    # Helper to print out the price data
+    def help_print_prices(self, prices, toConsole=True):
+        # Validate prices input: List & len >= 15
+        if type(prices) is not list:
+            self.printl("Error: parameter 'prices' must be a List, not a "+str(type(prices))+".", logging.ERROR, True)
+            raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
+
+        # Iterate through all records, json string dumping all key, values. 
+        self.printl("++ PRINTING PRICES:", logging.info, toConsole)
+        for record in prices:
+            #NOTE: The use of cls=DjangoJSONEncoder to handle object serialization failures using the Django stategy.
+            string_record = json.dumps(record, indent=4, cls=DjangoJSONEncoder)
+            self.printl(string_record, logging.INFO, toConsole)
+
+        # Check incoming prices List for the minimum length of required data.
+        #self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        if not len(prices)>=15:
+            self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
+            raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
+
+    # Calculates the RSI for a Price List. #NOTE: Needs AT LEAST 15 records to run, which is now validated in the method.
     def calculateRSI(self, prices):
+        """
+        Method to calculate the RSI of a input set of prices.
+
+        Attributes:
+            prices -- These are the prices to calcualte the RSI from. Data type must be an "array-like", dict, or scalar value, according to the "pandas.Series" method's 'data' parameter.
+        """
+        # Validate prices input: List & len >= 15
+        if type(prices) is not list:
+            self.printl("Error: parameter 'prices' must be a List, not a "+str(type(prices))+".", logging.ERROR, True)
+            raise TypeError("parameter 'prices' must be a List, not a "+str(type(prices))+".")
+
+        # Check incoming prices List for the minimum length of required data.
+        #self.printl("calculateRSI: Length: "+str(len(prices))+".", logging.INFO, True)
+        if not len(prices)>=15:
+            self.printl("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".", logging.ERROR, True)
+            raise ValueError("Error: parameter 'prices' list must have a length >= 15, but has a length of only "+str(len(prices))+".")
+        
+        close=pandas.Series(prices)
+
         window_length = 14
 
-        # Create a panda series with the incoming prices.
-        close=pandas.Series(prices)
-        
         # Get the difference in price from previous step
         delta = close.diff()
 
@@ -246,86 +317,113 @@ This is the object that encompasses the trading logic itself. It can be instanti
 
         return RSI1.iloc[-1]
 
-    #run a loop to run this every 2 minutes
+    # Akshay's trading algorithm.
     def algorithm(self):
-
+        """
+        This is Akshay's trading algorithm, which is commented inline.
+        """
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
+        
+        #print("OUR DATETIME: "+str(datetime.datetime.now(tz=self.SELECTED_TIMEZONE)))
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=80, partial=True, startTime=datetime.datetime.now()).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime.now(tz=datetime.timezone.utc)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, startTime=datetime.datetime(year=2018, month=11, day=4, hour=12, minute=0, second=0, tzinfo=self.SELECTED_TIMEZONE)).result()
+        #//!@# New Recommendation for acquiring Candles. Note: endTime parameter with custom datetime
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=datetime.datetime.now(tz=self.SELECTED_TIMEZONE)).result()
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=datetime.datetime.now()).result()
+        #relevant_datetime = self.my_rsi_timezone.get_current_datetime_in_timezone(selected_timezone=self.SELECTED_TIMEZONE)
+        #print("Our relevant datatime is: "+str(relevant_datetime))
+        #candles=self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=15, partial=True, endTime=relevant_datetime).result()
 
-        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()).result()
-        prices = self.help_collect_close_list(candles[0])
-        RSICurrent = self.calculateRSI(prices)
-        self.logger.info(RSICurrent)
-        self.printl(RSICurrent, True)
-        self.printl(prices[-1], True)
-        roundedRSI = int(round(RSICurrent))
+
+        
+        # Get the correct candles, using the above set SELECTED OFFSET.
+        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()-self.SELECTED_OFFSET).result()
+        
+        # Helper to print out the candles, log only.
+        #self.help_print_prices(candles[0], False)
+        
+        prices=self.help_collect_close_list(candles[0])
+        RSICurrent=self.calculateRSI(prices)
+        self.printl("RSICurrent: "+str(RSICurrent), logging.INFO, True)
+        self.printl("price: "+str(prices[-1]), logging.INFO, True)
+        roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI <= 20 and self.listRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][1]['price']#getting the bid price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
-            self.orders = self.orders+","+result[0]['orderID']
-            self.listRSI[roundedRSI] = True
-            self.logger.info("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        if (roundedRSI<=35 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][1]['price']#getting the bid price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+            if self.orders:
+                self.orders=self.orders+","+result[0]['orderID']
+            else:
+                self.orders=result[0]['orderID']
+            
+            self.listRSI[roundedRSI]=True
+            self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #Shorting high RSI
-        if (roundedRSI >= 80 and self.listRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][0]['price'] # getting the ask price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            self.orders = self.orders+","+result[0]['orderID']
-            self.listRSI[roundedRSI] = True
-            self.logger.info("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
+        if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][0]['price']#getting the ask price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.orders:
+                self.orders=self.orders+","+result[0]['orderID']
+            else:
+                self.orders=result[0]['orderID']
+            self.listRSI[roundedRSI]=True
+            self.printl("Short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #TODO: MAKE SURE THAT TAKE PROFIT LEVELS HAVE ORDER SIZES OF ABOVE 0.0025 BTC (around $16 right now).
-        ###################################TAKING PROFITS BELOW##################################################
+        ##################################################TAKING PROFITS BELOW##################################################################
 
         #Taking profits
-        currency = {"symbol": "XBTUSD"}
-        position = self.client.Position.Position_get(filter= json.dumps(currency)).result()
-        quantity = position[0][0]["currentQty"]+self.CURRENT_POSITION
+        currency={"symbol": "XBTUSD"}
+        position=self.client.Position.Position_get(filter= json.dumps(currency)).result()
+        quantity=position[0][0]["currentQty"]+self.CURRENT_POSITION
 
         #selling a long position
-        if (quantity > 0 and roundedRSI >= 25 and self.profitRSI[roundedRSI ]== False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][0]['price'] # getting the ask price
-            result = self.client.Order.Order_new(symbol='XBTUSD', orderQty=-30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if (self.prevorderProfit and self.prevorderProfitPrice != price):
+        if (quantity>0 and roundedRSI>=30 and self.profitRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][0]['price']#getting the ask price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.prevorderProfit and self.prevorderProfitPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
-                #logger.info("Cancelled existing order for taking profit")
-            self.prevorderProfit = result[0]['orderID']
-            self.prevorderProfitPrice = price
-            self.profitRSI[roundedRSI] = True
-            self.logger.info("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        
+                #self.printl("Cancelled existing order for taking profit", logging.INFO, True)
+            self.prevorderProfit=result[0]['orderID']
+            self.prevorderProfitPrice=price
+            self.profitRSI[roundedRSI]=True
+            self.printl("Take profit on long order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
+
         #cleaning up orders and position arrays
-        if(roundedRSI > 40 and roundedRSI < 60 and quantity == 0):
+        if(roundedRSI>40 and roundedRSI<60 and quantity==0):
             if self.orders:
-                self.client.Order.Order_cancel(orderID=self.orders).result() # CANCEL ALL ACTIVE ORDERS
+                self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
                 self.orders=""
-                self.logger.info("Cancelled existing orders")
-            self.listRSI = [False]*101
-            self.profitRSI = [False]*101
-            self.logger.info("Resetted position arrays for RSI of: "+str(roundedRSI))
+                self.printl("Cancelled existing orders", logging.DEBUG, True)
+            self.listRSI=[False]*101
+            self.profitRSI=[False]*101
+            self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #covering a short position
-        if (quantity < 0 and roundedRSI <= 75 and self.profitRSI[roundedRSI] == False):
-            level2Result = self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
-            price = level2Result[0][1]['price'] # getting the bid price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=30, price=price,execInst='ParticipateDoNotInitiate').result()
-            if (self.prevorderCover and self.prevorderCoverPrice != price):
+        if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            price=level2Result[0][1]['price']#getting the bid price
+            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
+            if self.prevorderCover and self.prevorderCoverPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
-                #logger.info("Cancelled existing order for covering short")
-            self.prevorderCover = result[0]['orderID']
+                #self.printl("Cancelled existing order for covering short", logging.DEBUG, True)
+            self.prevorderCover=result[0]['orderID']
             self.prevorderCoverPrice=price
-            self.profitRSI[roundedRSI] = True
-            self.logger.info("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI))
-        self.printl(self.listRSI, True)
-        self.printl(self.profitRSI, True)
-
-        # TODO?: Should this still be here Akshay? 
-        self.s.enter(40, 1, self.algorithm)
+            self.profitRSI[roundedRSI]=True
+            self.printl("Cover short order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
+        print("self.listRSI: "+str(self.listRSI))
+        print("self.profitRSI: "+str(self.profitRSI))
+        
+        # Removing the sleeping from the algorithm, placing into the run_script.
+        #time.sleep(40)
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])

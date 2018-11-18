@@ -18,6 +18,30 @@ class RSI_Generic_Error(Exception):
     def __str__(self):
         return repr("[X]    "+str(self.__class__.__name__)+": "+self.message)
 
+#--------------------
+# Bitmex Client Error
+#--------------------
+class Bitmex_Client_Error(RSI_Generic_Error):
+    """
+    Error to handle anything Bitmex client related. Subclass of RSI_Generic_Error.
+    
+    Attributes:
+        message -- Explanation of why the error is being shown.
+    """
+    def __init__(self, message=None):
+        # Set message to the one provided, else provide a default one.
+        if not message:
+            self.message = "An Bitmex_Client_Error has been raised, with no explaination."
+        else:
+            self.message = message
+    
+    def __str__(self):
+        return repr("[X]    "+str(self.__class__.__name__)+": "+self.message)
+
+#------------
+# HTTP Errors
+#------------
+
 class HTTP_503_Error(RSI_Generic_Error):
     """
     Error to handle HTTP 503 responses from the Bitmex client. Subclass of RSI_Generic_Error.
