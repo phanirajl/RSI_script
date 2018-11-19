@@ -12,8 +12,11 @@ my_rsi_timezone = RSI_Timezone()
 
 # Flag, for the desired Timezone
 SELECTED_TIMEZONE = my_rsi_timezone.get_kelowna_timezone()
-# Create new RSI_Script
-my_rsi = RSI_Script(SELECTED_TIMEZONE)
+
+# Create new RSI_Script's
+my_rsi_bitcoin = RSI_Script(SELECTED_TIMEZONE)
+my_rsi_litecoin = RSI_Script(SELECTED_TIMEZONE)
+my_rsi_ripple = RSI_Script(SELECTED_TIMEZONE)
 
 # A method created to be run by the Python Scheduler below.
 def go(wait=60):
@@ -33,7 +36,9 @@ def go(wait=60):
 
 
     # Run the RSI_Script instance. If run succeeds, it automatically stops itself.
-    my_rsi.run()
+    my_rsi_bitcoin.run("XBTUSD")
+    #my_rsi_litecoin.run("LITECOIN") #todo: Akshay, verify string.
+    #my_rsi_ripple.run("RPLUSD") #todo: Akshay, verify string
     
     # Get the time that the RSI_Script completed its work.
     complete_time = my_rsi_timezone.get_current_datetime_in_timezone(SELECTED_TIMEZONE)
@@ -70,7 +75,10 @@ while run==True:
         s.cancel(e)
     except KeyboardInterrupt:
         run=False
-        my_rsi.stop()
+        my_rsi_bitcoin.stop()
+        #my_rsi_litecoin.stop()
+        #my_rsi_ripple.stop()
+
         print("So long, and thanks for all the fish!.")
     except Exception as e:
         time.sleep(1)
