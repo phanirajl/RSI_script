@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import configparser
 import bitmex
 import datetime
@@ -103,6 +104,8 @@ class RSI_Script(object):
         #client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
         self.listRSI=[False]*101
         self.profitRSI=[False]*101
+
+        self.prices=None
               
 
     def run(self):
@@ -340,15 +343,14 @@ class RSI_Script(object):
 
         
         # Get the correct candles, using the above set SELECTED OFFSET.
-        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.now()-self.SELECTED_OFFSET).result()
-        
+        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.utcnow()-timedelta(hours=19)).result()        
         # Helper to print out the candles, log only.
         #self.help_print_prices(candles[0], False)
         
-        prices=self.help_collect_close_list(candles[0])
-        RSICurrent=self.calculateRSI(prices)
+        self.prices=self.help_collect_close_list(candles[0])
+        RSICurrent=self.calculateRSI(self.prices)
         self.printl("RSICurrent: "+str(RSICurrent), logging.INFO, True)
-        self.printl("price: "+str(prices[-1]), logging.INFO, True)
+        self.printl("price: "+str(self.prices[-1]), logging.INFO, True)
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
