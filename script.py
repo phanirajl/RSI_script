@@ -108,7 +108,13 @@ class RSI_Script(object):
         self.prices=None
               
 
-    def run(self):
+    def run(self, coin_symbol):
+        """
+        This method is used to run and start trading in the currency specified by the coin_symbol string.
+
+        Attributes:
+            coin_symbol -- This is the string of the symbol for the currency that you wish to trade in. Ex "XBTUSD" for Bitcoin USD .
+        """
         #self.printl("Running RSI_Script.", logging.DEBUG, True)
 
         # Surround main initialization in a keyboard interrupt except.
@@ -119,7 +125,7 @@ class RSI_Script(object):
             # time.sleep(2)
 
             # Run the algorithm: the real work.
-            self.algorithm()
+            self.algorithm(coin_symbol)
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -321,9 +327,13 @@ class RSI_Script(object):
         return RSI1.iloc[-1]
 
     # Akshay's trading algorithm.
-    def algorithm(self):
+    def algorithm(self, coin_symbol):
+        self.printl("The coin symbol is "+str(coin_symbol)+".", logging.DEBUG, True)
         """
         This is Akshay's trading algorithm, which is commented inline.
+
+        Attributes:
+            coin_symbol -- This is the string of the symbol for the currency that you wish to trade in. Ex "XBTUSD" for Bitcoin USD .
         """
         # Switching from defining these as globals to referenceing them as the object variables they now are (with self.variable_name).
         #global profitRSI, listRSI, orders, prevorderProfit, prevorderCover
@@ -355,9 +365,9 @@ class RSI_Script(object):
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
         if (roundedRSI<=35 and self.listRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
             if self.orders:
                 self.orders=self.orders+","+result[0]['orderID']
             else:
@@ -368,9 +378,9 @@ class RSI_Script(object):
 
         #Shorting high RSI
         if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.orders:
                 self.orders=self.orders+","+result[0]['orderID']
             else:
@@ -388,9 +398,9 @@ class RSI_Script(object):
 
         #selling a long position
         if (quantity>0 and roundedRSI>=30 and self.profitRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderProfit and self.prevorderProfitPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
                 #self.printl("Cancelled existing order for taking profit", logging.INFO, True)
@@ -411,9 +421,9 @@ class RSI_Script(object):
 
         #covering a short position
         if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol="XBTUSD",depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
-            result=self.client.Order.Order_new(symbol='XBTUSD', orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderCover and self.prevorderCoverPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
                 #self.printl("Cancelled existing order for covering short", logging.DEBUG, True)
