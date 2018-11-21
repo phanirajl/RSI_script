@@ -35,13 +35,16 @@ class RSI_Script(object):
     LOG_FORMAT = "%(levelname)s - %(asctime)s - %(message)s" # String defining the format for both log files to br written in.  
     
     # Initialization method. Called when a new instance of the RSI_Script object is created.
-    def __init__(self, selected_timezone):
+    def __init__(self, selected_timezone,coin_symbol,quantity):
         
         # Reload logging module.
         reload(logging)
 
         # Instance of RSI_Timezone
         self.my_rsi_timezone = RSI_Timezone()
+
+        self.coin_symbol=coin_symbol
+        self.trade_quantity=quantity
 
         # The selected timezone for the rest of the application to use.
         #NOTE: Note the logger doesn't use this yet.
@@ -60,7 +63,7 @@ class RSI_Script(object):
 
         # Check which developer's settings to use. Grab key, secret, and client_test.
 
-        LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", "example.log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
+        LOG_DESTINATION = os.path.join(os.getcwd(), os.path.join("logs", self.coin_symbol+".log")) # Akshay's logs now write to the project's directory, in a folder called "logs" (added to gitignore).
         logging.basicConfig(filename=LOG_DESTINATION,level=logging.DEBUG, format=RSI_Script.LOG_FORMAT)
 
         self.key = "WEvbIq1kwfl3r0utSjTiSJwR"
@@ -108,7 +111,7 @@ class RSI_Script(object):
         self.prices=None
               
 
-    def run(self, coin_symbol):
+    def run(self):
         """
         This method is used to run and start trading in the currency specified by the coin_symbol string.
 
@@ -125,7 +128,7 @@ class RSI_Script(object):
             # time.sleep(2)
 
             # Run the algorithm: the real work.
-            self.algorithm(coin_symbol)
+            self.algorithm()
 
         except KeyboardInterrupt:
             # Program was interrupted by user.
@@ -327,8 +330,8 @@ class RSI_Script(object):
         return RSI1.iloc[-1]
 
     # Akshay's trading algorithm.
-    def algorithm(self, coin_symbol):
-        self.printl("The coin symbol is "+str(coin_symbol)+".", logging.DEBUG, True)
+    def algorithm(self):
+        print(Style.BRIGHT + Fore.BLUE+ "For coin "+str(self.coin_symbol)+":")
         """
         This is Akshay's trading algorithm, which is commented inline.
 
@@ -353,7 +356,7 @@ class RSI_Script(object):
 
         
         # Get the correct candles, using the above set SELECTED OFFSET.
-        candles = self.client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.utcnow()-timedelta(hours=19)).result()        
+        candles = self.client.Trade.Trade_getBucketed(symbol=self.coin_symbol, binSize="5m", count=250, partial=True, startTime=datetime.datetime.utcnow()-timedelta(hours=19)).result()        
         # Helper to print out the candles, log only.
         #self.help_print_prices(candles[0], False)
         
@@ -364,10 +367,10 @@ class RSI_Script(object):
         roundedRSI=int(round(RSICurrent))
         #IMPORTANT NOTE: MAKE SURE ORDER SIZES ARE GREATER THAN 0.0025 XBT OTHERWISE ACCOUNT WILL BE CONSIDERED SPAM
         #Buying low RSI
-        if (roundedRSI<=35 and self.listRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
+        if (roundedRSI<=20 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=self.coin_symbol,depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
-            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
+            result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result() #Need .result() in order for the order to go through
             if self.orders:
                 self.orders=self.orders+","+result[0]['orderID']
             else:
@@ -377,10 +380,10 @@ class RSI_Script(object):
             self.printl("Buy order placed at :"+str(price)+" For RSI of: "+str(roundedRSI), logging.ERROR, True)
 
         #Shorting high RSI
-        if (roundedRSI>=75 and self.listRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
+        if (roundedRSI>=80 and self.listRSI[roundedRSI]==False):
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=self.coin_symbol,depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
-            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=-self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.orders:
                 self.orders=self.orders+","+result[0]['orderID']
             else:
@@ -392,15 +395,15 @@ class RSI_Script(object):
         ##################################################TAKING PROFITS BELOW##################################################################
 
         #Taking profits
-        currency={"symbol": "XBTUSD"}
+        currency={"symbol": self.coin_symbol}
         position=self.client.Position.Position_get(filter= json.dumps(currency)).result()
         quantity=position[0][0]["currentQty"]+self.CURRENT_POSITION
 
         #selling a long position
         if (quantity>0 and roundedRSI>=30 and self.profitRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=self.coin_symbol,depth=1).result() 
             price=level2Result[0][0]['price']#getting the ask price
-            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=-300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=-self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderProfit and self.prevorderProfitPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
                 #self.printl("Cancelled existing order for taking profit", logging.INFO, True)
@@ -421,9 +424,9 @@ class RSI_Script(object):
 
         #covering a short position
         if (quantity<0 and roundedRSI<=70 and self.profitRSI[roundedRSI]==False):
-            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=coin_symbol,depth=1).result() 
+            level2Result=self.client.OrderBook.OrderBook_getL2(symbol=self.coin_symbol,depth=1).result() 
             price=level2Result[0][1]['price']#getting the bid price
-            result=self.client.Order.Order_new(symbol=coin_symbol, orderQty=300, price=price,execInst='ParticipateDoNotInitiate').result()
+            result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderCover and self.prevorderCoverPrice != price:
                 self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
                 #self.printl("Cancelled existing order for covering short", logging.DEBUG, True)
@@ -439,13 +442,20 @@ class RSI_Script(object):
 
 ###########################################
 #calculateRSI([1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,16,17,11,12,12,14,15,16,11,1,2,3,40,50,60,70])
+#For ipython testing
+# import bitmex
+# import datetime
+# from datetime import timezone
+# from datetime import timedelta
+# selfkey = "WEvbIq1kwfl3r0utSjTiSJwR"
+# selfsecret = "k35qBUMz0pqti-aM-0Chw130VCWQOqbe4etuX91hQVh9TKc_"
+# client= bitmex.bitmex(api_key=selfkey, api_secret=selfsecret)
+# candles = client.Trade.Trade_getBucketed(symbol="XBTUSD", binSize="5m", count=250, partial=True, startTime=datetime.datetime.utcnow()-timedelta(hours=19)).result()        
 
-#import threading
-
-# def printit():
-#   threading.Timer(5.0, printit).start()
-#   print "Hello, World!"
-
-# printit()
+# import json
+# coin_symbol="XBTUSD"
+# currency={"symbol": coin_symbol}
+# position=client.Position.Position_get(filter= json.dumps(currency)).result()
+# #position[0][0]["currentQty"]
 
 

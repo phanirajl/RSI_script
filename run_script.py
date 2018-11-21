@@ -15,9 +15,14 @@ my_rsi_timezone = RSI_Timezone()
 SELECTED_TIMEZONE = my_rsi_timezone.get_kelowna_timezone()
 
 # Create new RSI_Script's
-my_rsi_bitcoin = RSI_Script(SELECTED_TIMEZONE)
-my_rsi_litecoin = RSI_Script(SELECTED_TIMEZONE)
-my_rsi_ripple = RSI_Script(SELECTED_TIMEZONE)
+my_rsi_bitcoin = RSI_Script(SELECTED_TIMEZONE,"XBTUSD",30)
+my_rsi_ethereum = RSI_Script(SELECTED_TIMEZONE,"ETHUSD",30)
+my_rsi_ripple = RSI_Script(SELECTED_TIMEZONE,"XRPZ18",100)
+my_rsi_cardano = RSI_Script(SELECTED_TIMEZONE,"ADAZ18",1000)
+my_rsi_bitcoincash = RSI_Script(SELECTED_TIMEZONE,"BCHZ18",1)
+my_rsi_EOS = RSI_Script(SELECTED_TIMEZONE,"EOSZ18",10)
+my_rsi_litecoin = RSI_Script(SELECTED_TIMEZONE,"LTCZ18",1)
+my_rsi_tron = RSI_Script(SELECTED_TIMEZONE,"TRXZ18",2000)
 
 # A method created to be run by the Python Scheduler below.
 def go(wait=60):
@@ -37,9 +42,14 @@ def go(wait=60):
 
 
     # Run the RSI_Script instance. If run succeeds, it automatically stops itself.
-    my_rsi_bitcoin.run("XBTUSD")
-    #my_rsi_litecoin.run("LITECOIN") #todo: Akshay, verify string.
-    #my_rsi_ripple.run("RPLUSD") #todo: Akshay, verify string
+    my_rsi_bitcoin.run()
+    my_rsi_ethereum.run() 
+    my_rsi_ripple.run()
+    my_rsi_cardano.run()
+    my_rsi_bitcoincash.run()
+    my_rsi_EOS.run()
+    my_rsi_litecoin.run()
+    my_rsi_tron.run()
     
     # Get the time that the RSI_Script completed its work.
     complete_time = my_rsi_timezone.get_current_datetime_in_timezone(SELECTED_TIMEZONE)
@@ -77,6 +87,13 @@ while run==True:
     except KeyboardInterrupt:
         run=False
         my_rsi_bitcoin.stop()
+        my_rsi_ethereum.stop()
+        my_rsi_ripple.stop()
+        my_rsi_cardano.stop()
+        my_rsi_bitcoincash.stop()
+        my_rsi_EOS.stop()
+        my_rsi_litecoin.stop()
+        my_rsi_tron.stop()
         #my_rsi_litecoin.stop()
         #my_rsi_ripple.stop()
 
