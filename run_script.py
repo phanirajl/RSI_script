@@ -99,7 +99,7 @@ while run==True:
 
         print("So long, and thanks for all the fish!.")
     except Exception as e:
-        time.sleep(8)
+        time.sleep(1)
         print ("Hey we caught a general exception")
 
   

@@ -139,7 +139,7 @@ class RSI_Script(object):
         except Exception as e:
             # Some other excemption has occured, and is being genericaly handled here.
             self.printl("[X]    Some unhandled exception has occured. "+str(e), logging.ERROR, True)
-            self.printl(str(traceback.print_exc(e)), logging.ERROR, True) # Decoration not applied.
+            self.printl(str(traceback.format_exc()), logging.ERROR, True) # Decoration not applied.
 
         #finally:
             #self.stop()
@@ -405,8 +405,13 @@ class RSI_Script(object):
             price=level2Result[0][0]['price']#getting the ask price
             result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=-self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderProfit and self.prevorderProfitPrice != price:
-                self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
+                try:
+                    self.client.Order.Order_cancel(orderID=self.prevorderProfit).result()
                 #self.printl("Cancelled existing order for taking profit", logging.INFO, True)
+                except Exception as e:
+                    # Some other excemption has occured, and is being genericaly handled here.
+                    self.printl("[X]   Exception occured trying to cancel order "+str(self.orders)+str(e), logging.ERROR, True)
+                    self.printl(str(traceback.format_exc()), logging.ERROR, True) # Decoration not applied.
             self.prevorderProfit=result[0]['orderID']
             self.prevorderProfitPrice=price
             self.profitRSI[roundedRSI]=True
@@ -415,9 +420,15 @@ class RSI_Script(object):
         #cleaning up orders and position arrays
         if(roundedRSI>40 and roundedRSI<60 and quantity==0):
             if self.orders:
-                self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
-                self.orders=""
-                self.printl("Cancelled existing orders", logging.DEBUG, True)
+                try:
+                    self.client.Order.Order_cancel(orderID=self.orders).result() #CANCEL ALL ACTIVE ORDERS
+                    self.orders=""
+                    self.printl("Cancelled existing orders", logging.DEBUG, True)
+                except Exception as e:
+                    # Some other excemption has occured, and is being genericaly handled here.
+                    self.printl("[X]   Exception occured trying to cancel orders "+str(self.orders)+str(e), logging.ERROR, True)
+                    self.printl(str(traceback.format_exc()), logging.ERROR, True) # Decoration not applied.
+
             self.listRSI=[False]*101
             self.profitRSI=[False]*101
             self.printl("Resetted position arrays for RSI of: "+str(roundedRSI), logging.ERROR, True)
@@ -428,8 +439,13 @@ class RSI_Script(object):
             price=level2Result[0][1]['price']#getting the bid price
             result=self.client.Order.Order_new(symbol=self.coin_symbol, orderQty=self.trade_quantity, price=price,execInst='ParticipateDoNotInitiate').result()
             if self.prevorderCover and self.prevorderCoverPrice != price:
-                self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
+                try:
+                    self.client.Order.Order_cancel(orderID=self.prevorderCover).result()
                 #self.printl("Cancelled existing order for covering short", logging.DEBUG, True)
+                except Exception as e:
+                    # Some other excemption has occured, and is being genericaly handled here.
+                    self.printl("[X]   Exception occured trying to cancel order "+str(self.orders)+str(e), logging.ERROR, True)
+                    self.printl(str(traceback.format_exc()), logging.ERROR, True) # Decoration not applied.
             self.prevorderCover=result[0]['orderID']
             self.prevorderCoverPrice=price
             self.profitRSI[roundedRSI]=True
@@ -455,7 +471,7 @@ class RSI_Script(object):
 # import json
 # coin_symbol="XBTUSD"
 # currency={"symbol": coin_symbol}
-# position=client.Position.Position_get(filter= json.dumps(currency)).result()
-# #position[0][0]["currentQty"]
+# client.Position.Position_get(filter= json.dumps(currency)).result()
+#position[0][0]["currentQty"]
 
 
